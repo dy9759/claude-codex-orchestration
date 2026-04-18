@@ -245,6 +245,85 @@ Codex 返回失败、任务说明导致歧义、集成被拒时，立即记录�
 
 ---
 
+## OpenSpace 子系统集成
+
+参考 [HKUDS/OpenSpace](https://github.com/HKUDS/OpenSpace) 的三个核心子系统：
+
+### Smart Tool RAG（中途技能检索）
+
+当 CC 或 Codex 执行到一半遇到瓶颈时，自动触发双阶段技能检索：
+
+```
+BM25 粗排（name+description+body[:2000]）
+    ↓  top candidates
+Semantic 精排（概念相似度 + 质量信号过滤）
+    ↓  best match
+注入技能指导，继续执行
+```
+
+触发条件：
+- 同一错误类型 Codex 任务被拒两次
+- CC 对 worktree / 压缩 / 集成步骤不确定
+- 任务涉及新领域/框架
+
+质量过滤：`.eval-scores.jsonl` 中 `dispatch`/`integration` 错误 ≥ 2 次的候选技能降权。
+
+---
+
+### Codex 质量追踪
+
+每次 Codex dispatch 后记录到 `.codex-quality.jsonl`：
+
+| 指标 | 健康 | 警告 | 行动 |
+|------|------|------|------|
+| 成功率 | ≥ 70% | 40–70% | 收紧 spec 模板 |
+| 平均 spec 字数 | < 150 | > 200 | 发送前压缩 |
+| 连续失败 | 0–2 | 3+ | 暂停派发，诊断根因 |
+
+**惩罚因子**（来自 OpenSpace ToolQualityRecord 设计）：
+- 成功率 < 40% → 强制要求 spec 显式列出所有文件，范围减半，扩展 off-limits
+- 连续 3+ 次失败 → 硬停止，不再派发 Codex，直到找到根因
+
+**语义失败注入**：集成阶段发现 scope-creep / 尺寸违规 / 无关改动 → 记为 `rejected`，与硬失败同权重计入成功率。
+
+**自动触发**：每 5 次 dispatch 检查质量，若触及警告阈值 → 提前运行 `/co:review`，不等 5 次会话周期。
+
+---
+
+### 派发安全门
+
+每次 Codex dispatch 前扫描 task spec，输出安全检查报告：
+
+```
+[Security] Scanning task spec...
+Blocked patterns: [none / list]
+High-risk patterns: [none / list]
+Scope: [declared files]
+Verdict: safe-to-dispatch / requires-confirmation / blocked
+```
+
+**默认封锁（只允许 CC 执行）：**
+- 数据库迁移 / 环境变量修改 / 包依赖文件 / CI/CD 管道 / 密钥 / 强制删除 / git 历史改写
+
+**高风险（需用户明确确认，以正常文字展示警告，不用 caveman）：**
+- 批量文件重命名 / 跨模块 import / 测试套件修改 / 共享配置文件
+
+**范围执行**：Codex 只能写 `Scope:` 内的文件。输出触碰 `Off-limits:` 或 `Scope:` 以外的文件 → 自动 `rejected`，记为 `scope-creep`。
+
+---
+
+## 数据文件
+
+| 文件 | 用途 |
+|------|------|
+| `.eval-scores.jsonl` | 双轴评分历史，防通胀检测 |
+| `.error-log.jsonl` | Codex 失败与协调错误日志 |
+| `.codex-quality.jsonl` | 每次 Codex dispatch 质量记录（成功率、惩罚因子输入）|
+| `results.tsv` | 会话级汇总记录 |
+| `.tasks/` | 并行任务板（原子认领，防止双写）|
+
+---
+
 ## 设计灵感与参考来源
 
 | 来源 | 借鉴内容 |
@@ -259,6 +338,9 @@ Codex 返回失败、任务说明导致歧义、集成被拒时，立即记录�
 | `karpathy/autoresearch` | 锁定评估器、简洁性原则、策略升级、自主不间断循环 |
 | `rohitg00/pro-workflow` | learn-rule 快速捕获、context 预算分阶段、compact-guard |
 | `shareAI-lab/learn-claude-code` | agent harness（任务板 + 心跳 + cron + 身份重注入）|
+| `HKUDS/OpenSpace: skill_engine` | Smart Tool RAG（BM25+embedding 双阶段检索 + 质量过滤）|
+| `HKUDS/OpenSpace: quality` | Codex 质量追踪（成功率、滚动窗口、惩罚因子、语义失败注入）|
+| `HKUDS/OpenSpace: security` | 派发安全门（危险模式检测、范围执行、用户确认门控）|
 
 ---
 

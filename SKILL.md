@@ -106,6 +106,93 @@ prompt: [compressed task spec above]
 
 ---
 
+## Smart Tool RAG (Mid-Session Skill Retrieval)
+
+When CC or Codex hits a wall mid-execution — current approach not working, domain knowledge missing — before asking the user, run a skill retrieval pass against `~/.claude/skills/`:
+
+**Two-stage pipeline (mirrors OpenSpace SkillRanker):**
+1. **BM25 stage** — tokenize task description, score all skills on `name + description + body[:2000]`. Keep top candidates. If total skills ≤ 10, skip to stage 2 directly.
+2. **Semantic stage** — re-rank BM25 candidates by concept overlap with the stuck query. Prefer skills with higher quality signals from `.eval-scores.jsonl`.
+3. **Quality filter** — if a candidate skill has ≥ 2 error-log entries for `dispatch` or `integration` failures, demote it in ranking.
+
+**Trigger conditions:**
+- Codex task spec rejected twice with same error → retrieve skill for that error category
+- CC uncertain about worktree setup, context compaction, or integration → retrieve matching skill
+- New domain/language/framework in scope → retrieve before dispatching
+
+**Fallback:** If no relevant skill found → proceed, but flag "no skill matched" in the session eval weak_point.
+
+---
+
+## Codex Quality Tracking
+
+Track per-dispatch Codex performance. Persist to `.codex-quality.jsonl`:
+
+```json
+{"date":"YYYY-MM-DD","task_id":1,"spec_words":N,"status":"success|rejected|wandered","latency_ms":N,"error_category":"dispatch|conflict|integration|scope-creep|none","consecutive_failures":N}
+```
+
+**Quality metrics (computed from rolling last-20 dispatches):**
+
+| Metric | Healthy | Warning | Action |
+|--------|---------|---------|--------|
+| Success rate | ≥ 70% | 40–70% | Tighten spec template |
+| Avg spec words | < 150 | > 200 | Always compress before send |
+| Consecutive failures | 0–2 | 3+ | **Pause dispatch, diagnose** |
+
+**Penalty factor** (from OpenSpace ToolQualityRecord logic):
+- Success rate ≥ 40% → no penalty, proceed normally
+- Success rate < 40% → penalize: require explicit file list in every spec, halve scope, add off-limits for all adjacent files
+- 3+ consecutive failures → hard stop: do not dispatch to Codex until root cause identified
+
+**Semantic failure injection** — technical success ≠ acceptance: if integration review rejects Codex output (scope-creep, size violation, unintended changes), record as `status: rejected` even if Codex itself returned no errors. This feeds the same success-rate metric as hard failures.
+
+**Auto-evolve trigger** — every 5 Codex dispatches, check quality. If warning threshold hit → run `/co:review` targeting `dispatch` dimension. Do not wait for the 5-session cadence.
+
+---
+
+## Dispatch Security Gate
+
+Pre-dispatch check on every Codex task spec before `codex:codex-rescue` is invoked. Block or confirm dangerous patterns.
+
+**Blocked by default (require explicit CC decision, never auto-dispatch to Codex):**
+```
+database migrations (ALTER TABLE, DROP TABLE, CREATE TABLE)
+environment variable changes (.env, process.env, os.environ writes)
+package manifest changes (package.json, requirements.txt, go.mod, Cargo.toml)
+CI/CD pipeline changes (.github/workflows/, .gitlab-ci.yml, Dockerfile, Makefile)
+secrets / credentials (API keys, tokens, passwords in any form)
+rm -rf / force delete operations
+git history rewrite (rebase -i, reset --hard, push --force)
+```
+
+**High-risk patterns — show warning + require user confirmation before dispatch:**
+```
+bulk file renames or moves
+cross-module imports (file touching two declared scopes)
+test suite modifications that could mask failures
+config.ts / settings.py / *.config.js (shared config files)
+```
+
+**Per-agent scope enforcement:**
+- CC: full access within declared worktree
+- Codex: read-only outside `Scope:` field; write-only within `Scope:` field; never write to `Off-limits:` list
+- If Codex output touches files outside `Scope:` → automatic `status: rejected`, record as `scope-creep` error
+
+**Security check format** — before any Codex dispatch, output:
+```
+[Security] Scanning task spec...
+Blocked patterns: [none / list]
+High-risk patterns: [none / list]
+Scope: [declared files]
+Verdict: safe-to-dispatch / requires-confirmation / blocked
+```
+
+If `blocked`: rewrite task spec to remove the blocked operation, assign it to CC instead.
+If `requires-confirmation`: pause, show warning in full (not caveman), wait for user yes/no.
+
+---
+
 ## Task Board (Multi-Codex Parallel Safety)
 
 When dispatching 2+ Codex tasks in parallel, use a task board to prevent double-claiming:
