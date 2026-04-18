@@ -1,6 +1,6 @@
 ---
 name: claude-codex-orchestration
-description: Use when the user wants to coordinate Claude Code + Codex as dual agents, delegate parallel implementation tasks to Codex, split frontend/backend work between agents, or control token consumption during orchestration while maintaining coding output quality.
+description: Use when the user wants to coordinate Claude Code + Codex as dual agents, delegate parallel implementation tasks to Codex, split frontend/backend work between agents, or control token consumption during orchestration. Also activates for cross-harness setup (Cursor, Codex, OpenCode), pre-task thinking (/co:think), strategic plan review (/co:plan-review), engineering principles enforcement (Hyrum's Law, Beyoncé Rule, test pyramid, Chesterton's Fence, trunk-based dev, shift left, feature flags, deprecation), and knowledge compounding.
 ---
 
 # Claude Code + Codex Orchestration
@@ -35,6 +35,96 @@ All **agent-internal communication** uses compressed caveman prose to cut ~75% o
 
 **Input token reduction:** Before starting a long session, suggest:
 > "Run `caveman:compress ~/.claude/CLAUDE.md` to cut input tokens ~46% per session."
+
+---
+
+## Cross-Harness Environment Layer
+
+The orchestration pattern works across Claude Code, Cursor, Codex, and OpenCode. Different harnesses have different config formats — use this map to stay portable.
+
+### Harness Detection
+
+At session start, detect active harness:
+```bash
+if ls ~/.claude/skills/ &>/dev/null; then echo "HARNESS=claude-code"
+elif [[ -d .cursor || -f .cursorrules ]]; then echo "HARNESS=cursor"
+elif [[ -f .opencode/opencode.json ]]; then echo "HARNESS=opencode"
+elif command -v codex &>/dev/null; then echo "HARNESS=codex"
+fi
+```
+
+Announce harness once: `"Detected harness: [harness]. Applying matching config."` Then proceed.
+
+### Configuration Map
+
+| Concept | Claude Code | Cursor | Codex | OpenCode |
+|---------|-------------|--------|-------|----------|
+| Global rules | `~/.claude/CLAUDE.md` | `.cursorrules` | `AGENTS.md` | `.opencode/opencode.json` |
+| Project rules | `CLAUDE.md` (local) | `.cursor/rules/*.mdc` | `AGENTS.md` | `.opencode/instructions/` |
+| Skills/workflows | `~/.claude/skills/*.md` | `.cursor/skills/` | No native equivalent | `.opencode/prompts/` |
+| Hooks | `settings.json` hooks | `.cursor/hooks.json` | `.codex/config.toml` approval | `.opencode/` events |
+| Slash commands | `/skill-name` via Skill tool | Not supported | Not supported | Commands in config |
+| Agent instructions | CLAUDE.md + SKILL.md | `.cursorrules` | `AGENTS.md` | `.opencode/instructions/` |
+
+### AGENTS.md as Universal Baseline
+
+`AGENTS.md` is read by all four harnesses. Use it to document:
+- Role definitions (CC = Tech Lead, Codex = Parallel Implementer)
+- Tool permissions per agent
+- Blocked file patterns (security gate)
+- Workflow summary (plan → split → parallel → integrate)
+
+Skills defined in `SKILL.md` format (CC-only) → distill key rules into `AGENTS.md` for cross-harness reach.
+
+### Hook Translation
+
+| Claude Code | Cursor | Codex | Purpose |
+|-------------|--------|-------|---------|
+| `PreToolUse` | `beforeShellExecution` | `approval_policy` gate | Validate before action |
+| `PostToolUse` | `afterShellExecution` | Post-run analysis | Analyze result |
+| `Notification` | `sessionEnd` | — | State persistence |
+| `Stop` | `stop` | — | Audit logging |
+| `PreCompact` | `preCompact` | — | Save compact-guard state |
+
+**Shared hook scripts** (obra/superpowers pattern): write hooks as standalone scripts, reference from each harness config. One script, multiple callers — no duplication.
+
+### Skill → Cross-Harness Translation
+
+CC skills have no direct equivalent in other harnesses. Translate:
+
+1. **Core rules** → extract into `AGENTS.md` (universal) and `CLAUDE.md` (CC + Cursor)
+2. **Cursor** → distill into `.cursor/rules/orchestration.mdc` (MDC format with frontmatter)
+3. **Codex** → AGENTS.md covers most; add orchestration config to `.codex/config.toml`
+4. **OpenCode** → extract to `.opencode/instructions/orchestration.txt`
+
+**Environment variable gating** (from ECC pattern): `HOOK_PROFILE=minimal|standard|strict` to switch hook intensity without editing files. `DISABLED_HOOKS` to gate specific hooks at runtime.
+
+### Bootstrap Per Harness
+
+**Claude Code** (full feature set):
+```bash
+git clone <repo> ~/.claude/skills/claude-codex-orchestration
+# Skill auto-available globally via Skill tool
+```
+
+**Cursor** (rule-based, no hooks):
+```bash
+# Distill SKILL.md → .cursor/rules/orchestration.mdc
+# MDC frontmatter: description + globs that trigger the rule
+```
+
+**Codex** (AGENTS.md-driven):
+```bash
+# Copy AGENTS.md to project root
+# Add orchestration config to .codex/config.toml:
+# [profiles.orchestrate] sandbox_mode = "workspace-write"
+```
+
+**OpenCode** (native agent config):
+```bash
+# Follow .opencode/INSTALL.md
+# Define orchestrator agent in opencode.json with appropriate tool permissions
+```
 
 ---
 
@@ -159,7 +249,40 @@ Checklist before sending:
 
 ---
 
-## Smart Tool RAG (Mid-Session Skill Retrieval)
+## Codex Co-Decision Protocol
+
+When CC would normally pause and ask the user a clarifying question — **route to Codex first**. This keeps the user's input flow uninterrupted and reduces human-in-loop.
+
+### When to Route to Codex
+
+- CC is uncertain between two implementation approaches
+- A design decision has no obvious right answer from context
+- An ambiguous task spec needs interpretation before splitting
+- CC needs a second opinion on a risk assessment
+
+**Never route to Codex for:** security decisions, irreversible operations, blocked dispatch patterns (Dispatch Security Gate rules still apply), or anything the user must explicitly approve.
+
+### Co-Decision Pattern
+
+```
+1. CC formulates the question + relevant context (< 150 words)
+2. Dispatch to Codex: read-only sandbox, --effort medium
+3. Prompt format:
+   <task>Analyze these two approaches for [decision]. Which better fits [context]?
+   Approach A: [description]. Approach B: [description]. Criteria: [what matters].</task>
+   <structured_output_contract>Return: recommendation (A or B), 2-sentence rationale,
+   confidence (high/medium/low), conditions where the other choice wins.</structured_output_contract>
+4. CC evaluates Codex recommendation:
+   - confidence=high → act on it, mention Codex rationale in plan
+   - confidence=medium → act on it + note assumption in plan
+   - confidence=low OR recommendation conflicts with known constraints → escalate to user
+     with: "Codex suggests X (low confidence). My read: Y. Which do you prefer?"
+```
+
+**Escalation format** (only when Codex can't resolve):
+> "Two options here — [A] or [B]. Codex leans [X] because [1-sentence reason]. Your call."
+
+This is one question, one sentence of context. Never multi-paragraph when escalating.
 
 ---
 
@@ -514,6 +637,8 @@ After promoting: remove the source entries from `.error-log.jsonl` to prevent st
 
 | Command | When to run |
 |---------|-------------|
+| `/co:think` | Before complex/ambiguous tasks — clarify, challenge premises, optional Codex cold read |
+| `/co:plan-review` | After Execution Plan is drafted — CEO-mode review (EXPAND/SELECTIVE/HOLD/REDUCE) |
 | `/co:eval` | End of every orchestration session |
 | `/co:review` | Every 5 sessions, or when `.eval-scores.jsonl` has 5+ new entries |
 | `/co:promote` | After `/co:review` identifies promotion candidate with score ≥ 6 |
@@ -589,3 +714,189 @@ Include: current branch, working directory
 Output: prior approaches, dead ends, key decisions, related context
 ```
 Use to avoid repeating failed approaches from prior sessions.
+
+---
+
+## Thinking & Decision Layer
+
+Two structured thinking modes before acting on complex tasks. Run these **before** producing an Execution Plan when the task is ambiguous, novel, or high-stakes.
+
+### `/co:think` — Pre-Task Thinking (office-hours style)
+
+Two modes — detect from context or ask:
+
+**Product/Design mode** (new feature, API design, workflow change):
+Ask these one at a time — wait for each response before asking the next. Smart-skip if already answered.
+1. What's the narrowest version that proves the core idea?
+2. Who exactly is this for, and what are they doing today instead?
+3. What's the most likely failure mode?
+4. What would a senior engineer say is unnecessary here?
+5. If you had 2 hours to demo this, what would you build?
+
+**Technical/Approach mode** (implementation unclear, multiple valid approaches):
+1. What's the coolest version of this? What makes it genuinely good?
+2. What existing pattern or code gets you 50% there?
+3. What would you add with unlimited time? (then ruthlessly cut back)
+4. What's the fastest path to something verifiable?
+
+**Escape hatch:** If the user says "just do it" or provides a fully-formed plan → skip to Premise Challenge only.
+
+**Premise Challenge** (always runs after questions):
+```
+PREMISES:
+1. [statement] — CC assessment: valid / questionable
+2. [statement] — CC assessment: valid / questionable
+3. [assumption this approach depends on] — CC assessment: valid / questionable
+```
+Proceed when premises are confirmed. If a premise is wrong → revise approach before splitting.
+
+**Cross-model second opinion** (optional — offer, don't auto-run):
+> "Want a Codex cold read on this? It gets a structured summary without having seen this conversation."
+If yes → dispatch via Codex Co-Decision Protocol with assembled context. Report findings as-is.
+
+### `/co:plan-review` — Strategic Plan Review (CEO review style)
+
+Run after an Execution Plan is drafted. Ask user to choose mode first:
+
+| Mode | Posture |
+|------|---------|
+| **EXPAND** | Dream bigger — what's the 10x version? Push scope up. |
+| **SELECTIVE** | Hold scope baseline + surface cherry-pick improvements via AskUserQuestion |
+| **HOLD** | Make current plan bulletproof — find every failure mode |
+| **REDUCE** | Minimum viable version — cut everything not essential to core outcome |
+
+**Prime Directives** (apply regardless of mode):
+1. **Zero silent failures** — every failure mode must be visible to the system, team, and user
+2. **Every error has a name** — no catch-all handlers; name the specific exception + what triggers it
+3. **Data flows have shadow paths** — for every new data flow: nil input, empty input, upstream error
+4. **Interactions have edge cases** — double-click, navigate-away, slow connection, stale state
+5. **Observability is scope** — logs/metrics on all new paths; not optional, not afterthought
+6. **Everything deferred is written down** — TODOS.md or it doesn't exist
+7. **Security is scope** — new codepaths need threat modeling
+
+**Critical rule:** Every scope change is an explicit user opt-in. Never silently add or remove scope.
+
+---
+
+## Engineering Principles Layer
+
+Applied rules derived from production engineering discipline. These fire as **decision gates** during orchestration — not background knowledge, active checks.
+
+### Common Rationalizations → Block Them
+
+When CC or Codex output contains these — flag and reject:
+| Rationalization | Block with |
+|-----------------|-----------|
+| "It's too simple to test" | Beyoncé Rule: if it matters, it has a test |
+| "We'll refactor later" | Later = never. If it's wrong now, fix now |
+| "This is just configuration" | Config errors propagate; review same as code |
+| "Feature flags are too complex" | Feature flags enable rollback; complexity is the price |
+| "No time to document" | Missing docs cost more in rework than writing them |
+| "It's temporary" | Temporary code becomes permanent |
+| "Tests make this too slow" | Tests find bugs before users do |
+
+### API Design — Hyrum's Law Gate
+
+Before any Codex task that touches public API surface:
+> **Hyrum's Law:** With enough users, ALL observable behaviors will be depended on — including undocumented ones.
+
+Checklist:
+- Are you exposing more than you intend? (response fields, error shapes, timing)
+- Is every exposed behavior intentional and documented?
+- Is the error semantics consistent across all endpoints?
+- Does adding this break backward compatibility for existing dependents?
+
+If any "no" → flag before dispatching. Changing observable behavior later costs 10× more than designing it right.
+
+### Testing — Beyoncé Rule + Test Pyramid
+
+**Beyoncé Rule:** "If you liked it, you should have put a test on it." Any behavior worth keeping has a test protecting it.
+- Bug fix with no regression test → reject; write the failing test first
+- New behavior with no test → flag before integrating
+
+**Test Pyramid** (enforce proportions in Codex output):
+```
+         [E2E ~5%]
+       [Integration ~15%]
+     [Unit tests ~80%]
+```
+If Codex returns integration-heavy or E2E-heavy test suite → flag as pyramid violation.
+
+**TDD gate:** For any implementation task — Codex must write failing test first, then minimal code to pass, then refactor. Codex output that skips RED phase = reject.
+
+### Code Review — Change Sizing + Review Speed
+
+**Change sizing** (apply to every Codex dispatch and integration):
+| Size | Verdict |
+|------|---------|
+| ≤ 100 lines | Good — reviewable in one sitting |
+| ≤ 300 lines | Acceptable for single logical change |
+| 300–1000 lines | Flag — split if possible |
+| > 1000 lines | Reject — must split before integration |
+
+**Review speed rule:** Integration review must produce a verdict within the same session. No "review later" deferrals — deferred reviews become technical debt.
+
+**Five-axis review** (apply at integration phase):
+1. Correctness — matches spec, handles edge cases, tests pass
+2. Readability — another engineer understands without explanation
+3. Architecture — fits system design, no circular dependencies
+4. Security — input validated, no secrets, auth checks present
+5. Performance — no N+1 patterns, no unbounded loops
+
+### Simplification — Chesterton's Fence
+
+Before allowing Codex to delete, remove, or "simplify" any existing code:
+> **Chesterton's Fence:** Don't remove something until you understand why it was put there.
+
+Required check: CC must identify the purpose of the removed code before approving. If purpose unknown → keep it and document it, or ask the user.
+
+Applies to: "dead code," unused variables, "redundant" checks, commented-out blocks, seemingly overcomplicated logic.
+
+### Git Workflow — Trunk-Based Development
+
+Worktree branches created for this orchestration session must be short-lived:
+- Feature branches: merge or discard within **1–3 days** (never long-lived)
+- Each commit: one logical change, < 300 lines preferred
+- "Long-lived branches are hidden costs — they diverge, conflict, and delay integration"
+- Prefer feature flags over long-lived branches for incomplete work
+- Clean up: delete merged branches after integration
+
+**Branch naming:** `feature/<agent>-<desc>`, `fix/<agent>-<desc>`, `chore/<agent>-<desc>`
+
+### CI/CD — Shift Left + Feature Flags
+
+**Shift Left:** Catch issues at commit time, not deployment time.
+- Every Codex implementation task should include: linting + type check + unit test command
+- No gate can be skipped — if linting fails, fix code; don't disable rules
+- CC responsibility: define verify step for each task that includes at minimum `test + lint`
+
+**Feature Flags** (require for new user-visible features):
+- New features go behind a flag: `OFF → team → 5% → 25% → 50% → 100% → cleanup`
+- Deployment ≠ release — flag lets you deploy safely and release deliberately
+- Rollback = turn off flag; no redeployment needed
+
+Codex task spec for new features must include flag wrapper or explicitly note "flag deferred — explain why."
+
+### Deprecation Protocol
+
+Structured lifecycle for any API, endpoint, or interface removal:
+
+**Decision gate** (before deprecating — answer all):
+1. Does the old system still provide unique value?
+2. How many consumers depend on it?
+3. Does a replacement exist?
+4. What's the migration cost per consumer?
+5. What's the ongoing cost of NOT deprecating?
+
+**Advisory vs. Compulsory:**
+- **Advisory** (default): migration optional, old system stable, communicate via warnings + docs
+- **Compulsory**: only when security risk or blocks progress; provide hard deadline + tooling + support
+
+**Migration strategies** (assign one before dispatching Codex):
+| Pattern | When |
+|---------|------|
+| Strangler | Run old + new in parallel, route gradually |
+| Adapter | Translate old interface → new implementation |
+| Feature Flag | Switch consumers one at a time |
+
+**Churn Rule:** If CC owns the deprecated interface → CC bears responsibility for migrating consumers or providing backward-compatible adapters. Never deprecate without a migration path.
