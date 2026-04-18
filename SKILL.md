@@ -140,6 +140,31 @@ Only use when tasks truly independent — clear input/output/file boundaries. Su
 
 ---
 
+## Quality Gates (Applied to Both Agents)
+
+Rules derived from global engineering standards, made explicit for multi-agent context.
+
+**Task scope (Simplicity First):**
+- Codex task spec must state minimum viable scope — no speculative features, no unrequested abstractions
+- If Codex returns more than asked: flag excess, reject or trim before integrating
+- Ask: "Would a senior engineer say this Codex output is overcomplicated?" If yes, send back
+
+**File ownership discipline (Surgical Changes):**
+- Codex removes only imports/variables/functions its own changes made unused
+- Codex must NOT touch pre-existing dead code unless task spec explicitly says so
+- Every changed line in Codex output must trace to the task spec — flag unrelated changes
+
+**Verifiable success criteria (Goal-Driven Execution):**
+- Every task in the Execution Plan must have an explicit verify step
+- Format per task: `[CC/Codex] Task → verify: [test command or observable check]`
+- No task is "done" until its verify step passes
+
+**Output size gate:**
+- New files from Codex: must be <500 lines. If exceeded → flag, request split before integrating
+- Max nesting depth: 20. Deeper → flag, request helper function extraction
+
+---
+
 ## Integration Phase (Caveman Status Report Format)
 
 After both agents complete, output:
@@ -151,15 +176,18 @@ Modified: [file list]
 Overlaps: [none / list conflicts]
 Regressions: [none / describe]
 Tests: [pass/fail summary]
+Size violations: [none / new files >500 lines]
 Verdict: ready / needs-fix / codex-rejected
 ```
 
 Steps:
 1. List all modified files — check overlaps
-2. Review Codex diff for unintended changes
-3. Check boundary regressions
-4. Run tests
-5. Emit verdict
+2. Review Codex diff: unintended changes? excess scope? pre-existing dead code touched?
+3. Check new file sizes — flag any >500 lines
+4. Check boundary regressions
+5. Run tests
+6. **Pre-push:** ask user — "是否需要触发一次全量代码审核？" before any git push
+7. Emit verdict
 
 ---
 

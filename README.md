@@ -146,6 +146,18 @@ Tone: caveman full
 
 ---
 
+## Quality Gates（集成前检查）
+
+来自全局 CLAUDE.md 的工程规范，在多 Agent 场景下显式执行：
+
+| 检查项 | 规则 |
+|--------|------|
+| **最小范围** | Codex 输出超出任务说明的部分一律标记，不直接合并 |
+| **文件边界** | Codex 只能删除它自己造成的孤儿代码，不得动预存死代码 |
+| **文件大小** | Codex 新建文件 <500 行，超出则要求拆分后再集成 |
+| **验收标准** | 计划中每个子任务必须有 `verify:` 步骤，通过才算完成 |
+| **Push 前审核** | 每次 push 前询问是否触发全量代码审核并创建 GitHub Issues |
+
 ## 集成阶段输出格式
 
 ```
@@ -155,6 +167,7 @@ Modified: [文件列表]
 Overlaps: [none / 冲突列表]
 Regressions: [none / 描述]
 Tests: [通过/失败摘要]
+Size violations: [none / >500行的新文件]
 Verdict: ready / needs-fix / codex-rejected
 ```
 
