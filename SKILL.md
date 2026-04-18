@@ -15,6 +15,52 @@ Claude Code = **Tech Lead / Orchestrator**. Codex = **Parallel Implementer**.
 
 ---
 
+## Session Start: Optional Plugin Detection
+
+At session start, scan `~/.claude/plugins/installed_plugins.json` for optional enhancements. Show hints **once per user** via a sentinel file — subsequent sessions stay silent.
+
+```bash
+REGISTRY=~/.claude/plugins/installed_plugins.json
+SENTINEL=~/.claude/.orch-plugin-hints-shown
+
+# Skip if already shown
+[ -f "$SENTINEL" ] && exit 0
+
+check() { grep -q "\"$1\"" "$REGISTRY" 2>/dev/null; }
+
+MISSING=()
+check "caveman"              || MISSING+=("caveman")
+check "compound-engineering" || MISSING+=("compound-engineering")
+check "superpowers@"         || MISSING+=("superpowers")
+
+if [ ${#MISSING[@]} -gt 0 ]; then
+  echo "[Orchestration] Optional plugins not detected: ${MISSING[*]}"
+  echo "  Skill works without them. Install guides (external):"
+  for p in "${MISSING[@]}"; do
+    case "$p" in
+      caveman)              echo "    caveman              → https://github.com/JuliusBrussee/caveman" ;;
+      compound-engineering) echo "    compound-engineering → https://github.com/EveryInc/compound-engineering-plugin" ;;
+      superpowers)          echo "    superpowers          → /plugin install superpowers@claude-plugins-official" ;;
+    esac
+  done
+  echo "  This hint shows once per user."
+  touch "$SENTINEL"
+fi
+```
+
+**What each plugin adds** (all optional):
+| Plugin | Enhancement |
+|--------|-------------|
+| `caveman` | Heavier output token compression (`caveman:compress`) + `/caveman lite\|full\|ultra` levels |
+| `compound-engineering` | Richer knowledge-compounding subagents (replaces inline 4-subagent pattern) |
+| `superpowers` | `superpowers:using-git-worktrees`, brainstorming, dispatching-parallel-agents |
+
+**Re-trigger hints:** remove the sentinel (`rm ~/.claude/.orch-plugin-hints-shown`) or ask "what orchestration plugins are available?" to re-run detection.
+
+**Never block:** skill proceeds to Phase 0 regardless of install status. Inline fallbacks cover every plugin path.
+
+---
+
 ## Token Budget Mode (Inline Compression)
 
 All **agent-internal communication** uses compressed prose to cut ~75% output tokens while preserving full technical substance. This applies to: execution plans, status updates, Codex task specs, inter-phase summaries, subagent briefs, and integration reports.
