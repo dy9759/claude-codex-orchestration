@@ -66,51 +66,49 @@ fi
 At session start, after Plugin Detection, check the project root for `AGENTS.md` and `CLAUDE.md`. AGENTS.md is the cross-harness source of truth; `CLAUDE.md` becomes a `@AGENTS.md` pointer so Claude Code reads the same file as Cursor / Codex / OpenCode.
 
 ```bash
-PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-cd "$PROJECT_ROOT" || exit 0
+# Wrapped in a function so `return 0` can exit early without killing the parent shell.
+agents_bootstrap() {
+  local project_root has_agents has_claude pointer='@AGENTS.md'
+  project_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+  cd "$project_root" 2>/dev/null || return 0
 
-HAS_AGENTS=$([ -f AGENTS.md ] && echo yes || echo no)
-HAS_CLAUDE=$([ -f CLAUDE.md ] && echo yes || echo no)
-POINTER_LINE='@AGENTS.md'
+  has_agents=$([ -f AGENTS.md ] && echo yes || echo no)
+  has_claude=$([ -f CLAUDE.md ] && echo yes || echo no)
 
-# Check if CLAUDE.md is already a pointer (only contains @AGENTS.md, ignoring blank/whitespace lines)
-is_pointer() {
-  [ -f CLAUDE.md ] && \
-  [ "$(grep -vE '^\s*$' CLAUDE.md | tr -d '[:space:]')" = "@AGENTS.md" ]
-}
+  # True if CLAUDE.md contains only `@AGENTS.md` (ignoring whitespace)
+  is_pointer() {
+    [ -f CLAUDE.md ] && \
+    [ "$(grep -vE '^\s*$' CLAUDE.md | tr -d '[:space:]')" = "@AGENTS.md" ]
+  }
 
-case "$HAS_AGENTS:$HAS_CLAUDE" in
-  yes:yes)
-    if is_pointer; then
-      echo "[AGENTS] OK — CLAUDE.md already points to @AGENTS.md"
-    else
-      echo "[AGENTS] WARN — both CLAUDE.md and AGENTS.md have content."
-      echo "         Review and consolidate; suggested: merge into AGENTS.md, reduce CLAUDE.md to '@AGENTS.md'."
-    fi
-    ;;
-  yes:no)
-    echo "$POINTER_LINE" > CLAUDE.md
-    echo "[AGENTS] Created CLAUDE.md → @AGENTS.md pointer"
-    ;;
-  no:yes)
-    # Migrate CLAUDE.md → AGENTS.md, preserve original as backup
-    cp CLAUDE.md CLAUDE.md.bak
-    mv CLAUDE.md AGENTS.md
-    echo "$POINTER_LINE" > CLAUDE.md
-    echo "[AGENTS] Migrated CLAUDE.md → AGENTS.md (backup: CLAUDE.md.bak)"
-    echo "         CLAUDE.md now points to @AGENTS.md"
-    ;;
-  no:no)
-    # Create minimal AGENTS.md template + pointer CLAUDE.md
-    cat > AGENTS.md <<'TEMPLATE'
+  case "$has_agents:$has_claude" in
+    yes:yes)
+      # OK path is silent — avoid session-start noise.
+      if ! is_pointer; then
+        echo "[AGENTS] WARN — both CLAUDE.md and AGENTS.md have content."
+        echo "         Suggested: merge into AGENTS.md, reduce CLAUDE.md to '@AGENTS.md'."
+      fi
+      ;;
+    yes:no)
+      printf '%s\n' "$pointer" > CLAUDE.md
+      echo "[AGENTS] Created CLAUDE.md → @AGENTS.md pointer"
+      ;;
+    no:yes)
+      cp CLAUDE.md CLAUDE.md.bak
+      mv CLAUDE.md AGENTS.md
+      printf '%s\n' "$pointer" > CLAUDE.md
+      echo "[AGENTS] Migrated CLAUDE.md → AGENTS.md (backup: CLAUDE.md.bak)"
+      ;;
+    no:no)
+      cat > AGENTS.md <<'TEMPLATE'
 # Agents
 
-## Role Definitions
+### Role Definitions
 
 - **Claude Code** — Tech Lead / Orchestrator. Owns repo exploration, architecture, backend, scripts, CI/CD, integration.
 - **Codex** — Parallel Implementer. Owns frontend, UI, isolated feature modules, parallel solution attempts, diff review.
 
-## Blocked File Patterns (Codex never writes these)
+### Blocked File Patterns (Codex never writes these)
 
 - Database migrations (ALTER/DROP/CREATE TABLE)
 - `.env`, secrets, API keys
@@ -119,22 +117,25 @@ case "$HAS_AGENTS:$HAS_CLAUDE" in
 - `rm -rf` / force-delete operations
 - Git history rewrites (rebase -i, reset --hard, push --force)
 
-## Workflow
+### Workflow
 
 1. Plan → split CC/Codex ownership cleanly
 2. Parallel execute in worktrees if needed (`feature/<agent>-<desc>`)
 3. Integrate once — single writer per file at any moment
 4. Verify: tests + lint + type check before push
 
-## Referenced Docs
+### Referenced Docs
 
 - Skill: `~/.claude/skills/claude-codex-orchestration/SKILL.md`
 - Solved problems (if present): `docs/solutions/`
 TEMPLATE
-    echo "$POINTER_LINE" > CLAUDE.md
-    echo "[AGENTS] Created AGENTS.md (template) and CLAUDE.md → @AGENTS.md pointer"
-    ;;
-esac
+      printf '%s\n' "$pointer" > CLAUDE.md
+      echo "[AGENTS] Created AGENTS.md (template) and CLAUDE.md → @AGENTS.md pointer"
+      ;;
+  esac
+}
+
+agents_bootstrap
 ```
 
 **Safety notes:**
@@ -286,7 +287,7 @@ Only then: produce Execution Plan.
 ## Execution Plan Format (Caveman, Required Before Acting)
 
 ```
-## Plan
+### Plan
 
 [CC] Task A — files: src/api/...
 [Codex] Task B — files: src/ui/...
@@ -607,7 +608,7 @@ Rules derived from global engineering standards, made explicit for multi-agent c
 After both agents complete, output:
 
 ```
-## Integration
+### Integration
 
 Modified: [file list]
 Overlaps: [none / list conflicts]

@@ -59,7 +59,10 @@ git clone https://github.com/dy9759/claude-codex-orchestration ~/.claude/skills/
 | `caveman` | 更深度输出 token 压缩 + 输入压缩工具 |
 | `compound-engineering` | 更丰富的知识沉淀 subagent 流水线 |
 
-**会话启动自动检测：** 第一次使用时自动扫描已安装插件，缺失的一次性提示安装链接，sentinel 文件避免重复打扰。
+**会话启动自动引导（零配置）：**
+1. 扫描已安装插件，缺失项一次性提示安装链接
+2. 检查项目 `AGENTS.md` / `CLAUDE.md`，自动迁移或创建，使 4 种 harness 指向同一份指令源
+3. 详见下面 **Section 0. Session Start**
 
 ---
 
@@ -82,6 +85,10 @@ Claude Code 会自动：
 ## 执行流程
 
 ```
+Session Start
+          ↓
+          [可选插件检测] → [AGENTS.md 自动引导]
+          ↓
 Phase 0   理解任务
           ↓
           输出 Execution Plan（压缩格式，等用户确认）
@@ -93,6 +100,38 @@ Phase 1   并行执行
 Phase 2   集成
           └─ 差异审查 → 回归检查 → 测试 → 最终结论
 ```
+
+---
+
+## 0. Session Start（自动执行，一次性）
+
+### 可选插件检测
+
+会话启动时读 `~/.claude/plugins/installed_plugins.json`，检测 `caveman`、`compound-engineering`、`superpowers`。缺失项一次性打印安装链接，sentinel 文件 `~/.claude/.orch-plugin-hints-shown` 防止重复打扰。**永不阻断** — 所有可选插件都有内联 fallback。
+
+重新触发：`rm ~/.claude/.orch-plugin-hints-shown`
+
+### AGENTS.md 自动引导
+
+**AGENTS.md 是跨 harness 的唯一真相来源**（Claude Code、Cursor、Codex、OpenCode 都读它）。会话启动时自动检查项目根：
+
+| AGENTS.md | CLAUDE.md | 动作 |
+|-----------|-----------|------|
+| ✅ | ✅（是 `@AGENTS.md` 指针） | OK，静默 |
+| ✅ | ✅（有其他内容） | WARN，建议合并，不自动操作 |
+| ✅ | ❌ | 创建 `CLAUDE.md` 内容为 `@AGENTS.md` |
+| ❌ | ✅ | 迁移 CLAUDE.md → AGENTS.md（备份 `CLAUDE.md.bak`），CLAUDE.md 改为 `@AGENTS.md` |
+| ❌ | ❌ | 从模板创建 AGENTS.md + CLAUDE.md 指针 |
+
+**官方文档支持：** Claude Code 识别 CLAUDE.md 中的 `@filename` 语法为 import 指令，会话启动时自动展开 AGENTS.md 内容（[code.claude.com/docs/en/memory.md](https://code.claude.com/docs/en/memory.md)）。
+
+### **⚠️ AGENTS.md 写入重定向规则（强制）**
+
+> **所有 agent 指令/规则/角色/项目约定——一律写入 `AGENTS.md`，永不 `CLAUDE.md`。**
+>
+> CLAUDE.md 永远只有一行 `@AGENTS.md`。唯一例外：修改那行指针本身。
+>
+> **原因：** 写入 CLAUDE.md 会造成 CC-only 规则，Cursor/Codex/OpenCode 看不到，破坏跨 harness parity。
 
 ---
 
