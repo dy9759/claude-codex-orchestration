@@ -1,6 +1,6 @@
 # claude-codex-orchestration
 
-> Claude Code 作为总控，Codex 作为并行实现者，双 Agent 协同编码 skill。内置 Caveman token 压缩，保证输出质量的同时大幅降低 token 消耗。
+> Claude Code 作为 Tech Lead（总控），Codex 作为 Parallel Implementer（并行实现者），双 Agent 协同编码 skill。自包含运行（无强制外部插件依赖），可选集成 caveman / compound-engineering / superpowers 进一步增强。跨 harness 可用（Claude Code / Cursor / Codex / OpenCode）。
 
 ---
 
@@ -24,41 +24,58 @@ Claude Code（Tech Lead）
 
 ---
 
+## 八大能力层
+
+| 层 | 核心能力 |
+|----|----------|
+| 1. 跨 Harness 环境 | 4 种 harness 检测 + 配置映射 + hook 翻译 + AGENTS.md 通用基线 |
+| 2. Token 预算 | 三档内联压缩（lite/full/ultra），阶段化上下文预算，compact-guard |
+| 3. 规划与分派 | Phase 0 理解 → Execution Plan → Codex 调用协议（XML 结构化 prompt） |
+| 4. Codex Co-Decision | CC 问题先路由到 Codex，置信度门控升级，减少 human-in-loop |
+| 5. 安全与质量 | Smart Tool RAG、质量追踪（滚动 20 窗）、安全门、任务板原子认领 |
+| 6. 思考与决策 | `/co:think`（产品/技术双模式）、`/co:plan-review`（CEO 级 4 模式） |
+| 7. 工程原则 | Hyrum's Law、Beyoncé Rule、测试金字塔、Chesterton's Fence、Trunk-Based、Shift Left、Feature Flag、Deprecation |
+| 8. 自我纠错与知识复利 | 三层自我纠错（eval/capture/promote）、darwin 棘轮、`/co:compound` 知识沉淀 |
+
+---
+
 ## 安装
 
 skill 放在 `~/.claude/skills/`，Claude Code 全局自动发现，无需 per-project 配置。
 
 ```bash
-# 克隆或手动复制到全局 skills 目录
-cp -r claude-codex-orchestration ~/.claude/skills/
+git clone https://github.com/dy9759/claude-codex-orchestration ~/.claude/skills/claude-codex-orchestration
 ```
 
-**依赖：**
-- Claude Code（已安装 `codex@openai-codex` plugin）
-- `superpowers@claude-plugins-official` plugin（worktree、parallel agent 支持）
-- 可选：`caveman` plugin（强化 token 压缩）
+**必需：**
+- Claude Code CLI
+- `codex@openai-codex` plugin（Codex 调度底层）
+
+**可选增强（skill 无强依赖，未安装时自动走内联 fallback）：**
+
+| 插件 | 能力增强 |
+|------|----------|
+| `superpowers@claude-plugins-official` | worktree 自动化、并行 subagent 分发 |
+| `caveman` | 更深度输出 token 压缩 + 输入压缩工具 |
+| `compound-engineering` | 更丰富的知识沉淀 subagent 流水线 |
+
+**会话启动自动检测：** 第一次使用时自动扫描已安装插件，缺失的一次性提示安装链接，sentinel 文件避免重复打扰。
 
 ---
 
 ## 使用方式
 
-在任意项目中，对 Claude Code 说：
-
 ```
 使用 claude-codex-orchestration skill，帮我实现 <你的需求>
 ```
 
-或者直接：
-
-```
-/claude-codex-orchestration <需求描述>
-```
-
 Claude Code 会自动：
 1. 探索仓库，理解影响范围
-2. 输出执行计划（含 CC / Codex 分工、worktree、subagent 决策）
+2. 输出 Execution Plan（含 CC/Codex 分工、worktree、subagent 决策）
 3. 等你确认后并行执行
 4. 集成双方输出，输出验证结论
+
+**前置可选：** 遇到复杂任务时先 `/co:think`（前置思考）或 `/co:plan-review`（计划审核）。
 
 ---
 
@@ -67,11 +84,11 @@ Claude Code 会自动：
 ```
 Phase 0   理解任务
           ↓
-          输出执行计划（Caveman 格式，等用户确认）
+          输出 Execution Plan（压缩格式，等用户确认）
           ↓
 Phase 1   并行执行
           ├─ CC 处理主线任务
-          └─ Codex 处理独立模块（task spec <200 词）
+          └─ Codex 处理独立模块（task spec <200 词，XML 结构化）
           ↓
 Phase 2   集成
           └─ 差异审查 → 回归检查 → 测试 → 最终结论
@@ -79,32 +96,50 @@ Phase 2   集成
 
 ---
 
-## Token 控制（Caveman 集成）
+## 1. 跨 Harness 环境层
 
-所有 Agent 内部通信（执行计划、状态更新、Codex 任务说明、集成报告）默认使用 **Caveman `full`** 模式，削减约 75% 输出 token，技术信息完整保留。
+同一套编排逻辑可在 Claude Code、Cursor、Codex、OpenCode 中使用。
 
-| 级别 | 描述 | 适用场景 |
-|------|------|---------|
-| `lite` | 去掉废话和模糊表达，保留完整句子 | 需要可读性高的计划输出 |
-| `full` | 省略冠词、碎句 OK、短同义词替换（默认） | 日常编排通信 |
-| `ultra` | 缩写（DB/fn/impl）、箭头表示因果（X → Y） | token 极度紧张时 |
+**Harness 检测：** 会话启动时通过 env var 或文件存在性判断当前 harness。
 
-切换级别：`/caveman lite` / `/caveman full` / `/caveman ultra`
+**配置映射表（部分）：**
 
-**永远不压缩：**
-- 代码块（始终正常书写）
-- 安全警告、不可逆操作确认
-- 用户需要清晰理解的最终交付物
+| 概念 | Claude Code | Cursor | Codex | OpenCode |
+|------|-------------|--------|-------|----------|
+| 全局规则 | `~/.claude/CLAUDE.md` | `.cursorrules` | `AGENTS.md` | `opencode.json` |
+| 项目规则 | `CLAUDE.md` | `.cursor/rules/*.mdc` | `AGENTS.md` | `.opencode/instructions/` |
+| Skills | `~/.claude/skills/*.md` | `.cursor/skills/` | 无 | `.opencode/prompts/` |
+| Hooks | `settings.json` | `.cursor/hooks.json` | `.codex/config.toml` | `.opencode/` events |
 
-**输入 token 优化：** 长会话开始前建议运行：
-```
-caveman:compress ~/.claude/CLAUDE.md
-```
-可减少约 46% 的每次会话输入 token。
+**AGENTS.md 作为通用基线** — 4 种 harness 都读它。用 AGENTS.md 放角色定义、工具权限、阻断文件模式等跨 harness 规则。
+
+**Hook 翻译表：** `PreToolUse ↔ beforeShellExecution ↔ approval_policy` 等效映射。
 
 ---
 
-## 默认分工
+## 2. Token 预算层（内联压缩）
+
+所有 Agent 内部通信（执行计划、状态更新、Codex 任务说明、集成报告）默认使用 `full` 级内联压缩，削减约 75% 输出 token。
+
+| 级别 | 风格规则 |
+|------|----------|
+| `lite` | 只去废话，保持完整句子 |
+| `full` | 省略冠词，碎句 OK，短同义词（**默认**） |
+| `ultra` | 缩写（DB/fn/impl/env），箭头因果（X → Y），极度紧张时用 |
+
+**永远不压缩：** 代码块、安全警告、不可逆操作确认、最终交付物。
+
+**阶段化上下文预算：** Phase 0 < 20% · 并行执行 < 60% · 集成 < 80% · Push < 90%。
+
+**compact-guard：** compaction 前保存 5 个关键文件，因为只有 5 个能熬过压缩。
+
+**身份重注入：** compaction 恢复后 CC 必须重注入自己的角色，否则会忘记 Codex 正在做什么而重复工作。
+
+---
+
+## 3. 规划与分派层
+
+### 默认分工
 
 | Claude Code 负责 | Codex 负责 |
 |-----------------|-----------|
@@ -114,80 +149,184 @@ caveman:compress ~/.claude/CLAUDE.md
 | 高风险/跨模块改动 | 并行方案试解 |
 | 最终集成与发布前检查 | 当前 diff review |
 
----
+### Codex 调用协议
 
-## Codex 任务说明模板
+**前台/后台：**
+- 小任务、< 10 分钟 → 前台阻塞
+- 复杂多步任务 → 后台返回 `job-id`，CC 继续干其他事，稍后用 `result` 拉取
 
-每次给 Codex 的任务说明必须是 Caveman 格式，<200 词：
+**Thread 持久化：**
+- 新任务：不加 `--resume-last`
+- 延续同一工作（"continue"、"dig deeper"）：加 `--resume-last`，只发增量指令
+- 强制开新 thread：加 `--fresh`
 
-```
-Goal: [一句话目标]
-Scope: [可以改的文件/目录]
-Off-limits: [不能动的文件]
-Subagents: yes/no
-Worktree: yes/no → branch: [名称]
-Deliver: 改动摘要、修改文件、测试结果、风险点、待确认问题
-Tone: caveman full
-```
+**写权限和 effort：**
+| 任务类型 | flags | sandbox |
+|---------|-------|---------|
+| 实现/改 bug | `--write` | `workspace-write` |
+| review/诊断/调研 | 无 | `read-only` |
+| 简单 UI | `--effort low` | — |
+| 复杂后端/架构 | `--effort high` | — |
+| 深度诊断 | `--effort xhigh` | — |
 
----
-
-## Worktree 使用规则
-
-**触发条件（满足任一即建 worktree）：**
-- CC 与 Codex 并行实现不同模块
-- 同时测试 2+ 个竞争方案
-- 隔离高风险改动
-
-**规则：**
-- 每个 worktree 只有一个主写入者
-- 命名：`feature/<agent>-<描述>`（如 `feature/codex-ui-redesign`）
-- 合并前：diff 审查 → cherry-pick 或手动集成
-
----
-
-## Quality Gates（集成前检查）
-
-来自全局 CLAUDE.md 的工程规范，在多 Agent 场景下显式执行：
-
-| 检查项 | 规则 |
-|--------|------|
-| **最小范围** | Codex 输出超出任务说明的部分一律标记，不直接合并 |
-| **文件边界** | Codex 只能删除它自己造成的孤儿代码，不得动预存死代码 |
-| **文件大小** | Codex 新建文件 <500 行，超出则要求拆分后再集成 |
-| **验收标准** | 计划中每个子任务必须有 `verify:` 步骤，通过才算完成 |
-| **Push 前审核** | 每次 push 前询问是否触发全量代码审核并创建 GitHub Issues |
-
-## 集成阶段输出格式
-
-```
-## Integration
-
-Modified: [文件列表]
-Overlaps: [none / 冲突列表]
-Regressions: [none / 描述]
-Tests: [通过/失败摘要]
-Size violations: [none / >500行的新文件]
-Verdict: ready / needs-fix / codex-rejected
+**XML 结构化 Prompt**（< 200 词）：
+```xml
+<task>[具体任务 + 完成标准]</task>
+<structured_output_contract>[期望返回格式]</structured_output_contract>
+<default_follow_through_policy>[遇到问题该怎么决策]</default_follow_through_policy>
+<verification_loop>[实现任务必填]</verification_loop>
+<grounding_rules>[review 任务必填]</grounding_rules>
+<action_safety>[write 任务必填]</action_safety>
 ```
 
+**结果处理铁律：**
+- Codex 返回的 review 发现：**STOP**，不自动应用，明确询问用户修哪个
+- Codex 失败：如实报告，不拿 CC 的答案顶替
+- 从未调用 Codex：什么都不返回，不编造
+
 ---
 
-## 自我纠错与进化（三层机制）
+## 4. Codex Co-Decision 协议
 
-参考 `alirezarezvani/claude-skills` 中的 `self-eval` 和 `self-improving-agent` 设计。
+当 CC 本来要停下来问用户时 → **先路由到 Codex**，保持用户输入流不中断。
+
+**流程：**
+1. CC 组装问题 + 上下文（< 150 词）
+2. 派发 Codex（read-only，`--effort medium`）
+3. Codex 返回 `recommendation + rationale + confidence(high/medium/low)`
+4. CC 按置信度决策：
+   - `high` → 直接执行，计划里提 Codex 理由
+   - `medium` → 执行 + 在计划里标注假设
+   - `low` 或与已知约束冲突 → 向用户升级，附带 Codex 建议
+
+**禁用场景：** 安全决策、不可逆操作、Dispatch Security Gate 的阻断项——这些必须用户确认。
+
+**升级格式（一句话）：** "两个选择——[A] 或 [B]。Codex 倾向 [X] 因为 [一句话]。你决定。"
 
 ---
+
+## 5. 安全与质量层
+
+### Smart Tool RAG（中途技能检索）
+
+卡住时，先在 `~/.claude/skills/` + `docs/solutions/` 做双阶段检索：
+
+```
+BM25 粗排（name + description + body[:2000]）
+    ↓  top candidates（skills ≤ 10 时跳过粗排）
+Semantic 精排（概念相似度 + 质量信号）
+    ↓  quality filter：有 ≥ 2 次 dispatch/integration 错误的技能降权
+    ↓
+注入技能指导，继续执行
+```
+
+### Codex 质量追踪
+
+| 指标 | 健康 | 警告 | 行动 |
+|------|------|------|------|
+| 成功率（滚动 20 次） | ≥ 70% | 40–70% | 收紧 spec 模板 |
+| 平均 spec 字数 | < 150 | > 200 | 发送前压缩 |
+| 连续失败 | 0–2 | 3+ | 暂停派发，诊断根因 |
+
+**惩罚因子：** 成功率 < 40% → 强制显式列文件，范围减半；连续 3+ 失败 → 硬停。
+**语义失败注入：** 集成阶段的 scope-creep / 尺寸违规 / 无关改动 = 硬失败同权重。
+
+### 派发安全门
+
+每次 Codex dispatch 前扫描 task spec：
+
+**默认封锁（只允许 CC 执行）：**
+- 数据库迁移 / 环境变量 / 包依赖文件 / CI/CD / 密钥 / 强制删除 / git 历史改写
+
+**高风险（需用户明确确认，不用压缩格式）：**
+- 批量重命名 / 跨模块 import / 测试套件修改 / 共享配置文件
+
+### 任务板（多 Codex 并行）
+
+`.tasks/*.json`，原子认领 `owner` 字段防止双写。集成阶段审计无重叠。
+
+### Worktree
+
+- 每 worktree 只有一个主写入者
+- 命名 `feature/<agent>-<描述>`
+- 合并前 diff 审查 → cherry-pick 或手动集成
+- 生命周期 ≤ 1–3 天（Trunk-Based）
+
+---
+
+## 6. 思考与决策层
+
+### `/co:think` — 前置思考（office-hours 风格）
+
+**产品/设计模式**（新功能、API 设计）—— 5 问一问一答：
+1. 最窄能证明核心的版本是什么？
+2. 这是给谁用？他们现在在做什么替代？
+3. 最可能的失败模式？
+4. 资深工程师会说哪里不必要？
+5. 如果只有 2 小时做 demo，你做什么？
+
+**技术/方案模式**（实现不清）—— 4 问：
+1. 最酷的版本长什么样？
+2. 现有什么代码/模式能给到你 50%？
+3. 无限时间会加什么？（再残忍砍掉）
+4. 验证可行的最快路径？
+
+**Premise Challenge（强制，问完之后）：**
+```
+PREMISES:
+1. [陈述] — valid / questionable
+2. [假设] — valid / questionable
+```
+
+**可选：Codex cold read** — 组装上下文递给 Codex，得到独立第二意见。
+
+### `/co:plan-review` — Execution Plan 战略审核（CEO review 风格）
+
+4 种模式（选其一）：
+
+| 模式 | 姿态 |
+|------|------|
+| **EXPAND** | 做大 — 10 倍版本是什么？推动范围向上 |
+| **SELECTIVE** | 守住基线 + 通过 AskUserQuestion 逐项 cherry-pick 扩展 |
+| **HOLD** | 让当前计划无懈可击——找出每一个失败模式 |
+| **REDUCE** | 最小可行版本——砍掉一切非核心 |
+
+**Prime Directives（所有模式都应用）：**
+1. Zero silent failures — 每个失败模式对系统/团队/用户都可见
+2. Every error has a name — 不允许笼统 catch-all
+3. Data flows have shadow paths — 新数据流必追踪 nil/empty/upstream-error 三条影子
+4. Interactions have edge cases — 双击、导航中断、慢连接、stale 状态
+5. Observability is scope — 新路径必须有 log/metric/trace
+6. Everything deferred is written down — TODOS.md 或视为不存在
+7. Security is scope — 新路径必须威胁建模
+
+**铁律：** 任何 scope 改动必须经 AskUserQuestion 显式同意，不允许静默增删。
+
+---
+
+## 7. 工程原则层
+
+| 维度 | 规则 |
+|------|------|
+| **Common Rationalizations** | "太简单不用测"、"以后再重构"、"只是配置"、"Feature flag 太复杂" 等话术一律拒绝 |
+| **API 设计（Hyrum's Law）** | 有足够用户后，所有可观察行为都会被依赖。暴露即契约 |
+| **测试（Beyoncé Rule）** | 值得保留的行为必有测试。Bug 修复必先写复现测试 |
+| **测试金字塔** | 单元 80% / 集成 15% / E2E 5%。集成或 E2E 过重 → 违规 |
+| **Change Sizing** | ≤ 100 行好 / ≤ 300 行可 / > 1000 行必须拆 |
+| **Five-Axis Review** | Correctness / Readability / Architecture / Security / Performance |
+| **Chesterton's Fence** | 删之前必先理解它为什么存在 |
+| **Trunk-Based Dev** | 分支 ≤ 1–3 天，优先 feature flag 而非长期分支 |
+| **Shift Left** | 提交时跑 lint + type check + test，不等到部署 |
+| **Feature Flags** | 新功能 OFF → team → 5% → 25% → 50% → 100% → cleanup |
+| **Deprecation** | Advisory/Compulsory 区分，Strangler/Adapter/Feature-Flag 三种迁移策略，Churn Rule |
+
+---
+
+## 8. 自我纠错 + 知识复利层
 
 ### Layer 1 — 会话自评 `/co:eval`
 
-每次会话结束后运行。**双轴评分**，不允许直接选分数：
-
-**轴 A — 编排复杂度**（任务本身难度）：`Low / Medium / High`
-
-**轴 B — 执行质量**（结果好坏）：`Poor / Adequate / Strong`
-
-**固定矩阵出分**（不可覆盖）：
+**双轴评分矩阵（锁定，不可改）：**
 
 |                        | Poor | Adequate | Strong |
 |------------------------|:----:|:--------:|:------:|
@@ -195,120 +334,71 @@ Verdict: ready / needs-fix / codex-rejected
 | **Medium Ambition**    |  2   |    3     |   4    |
 | **High Ambition**      |  2   |    4     |   5    |
 
-**强制魔鬼辩护**：评分前必须分别论证"为什么应该更低"和"为什么应该更高"，再解决分歧，才能最终确认分数。防止 AI 默认给 4 分的评分通胀。
-
-**防通胀检测**：读取 `.eval-scores.jsonl`，如果最近 5 次有 4 次相同分数 → 警告，强制重新评估。
-
-评分持久化到：`.eval-scores.jsonl`
-
----
+**强制魔鬼辩护：** 打分前必须分别论证 LOWER 和 HIGHER，再解决分歧。
+**防通胀：** 最近 5 次 4 次同分 → 警告强制重评。
+**锁定评估器：** 矩阵不可改（来自 karpathy/autoresearch）——分数不舒服只能走辩护，不能改矩阵。
 
 ### Layer 2 — 错误自动捕获
 
-Codex 返回失败、任务说明导致歧义、集成被拒时，立即记录到 `.error-log.jsonl`：
-
-| 错误类型 | 触发条件 |
-|---------|---------|
-| `dispatch` | Codex 任务说明太模糊，Codex 跑偏或要求澄清 |
-| `conflict` | 文件 ownership 冲突，两个 Agent 改了同一文件 |
-| `integration` | Codex 输出被拒，超出范围/超 500 行/有无关改动 |
-| `scope-creep` | Codex 改了不在声明范围内的文件 |
-| `token` | Caveman 级别未有效降低 token 消耗 |
-
----
-
-### Layer 3 — 审查与晋升 `/co:review` / `/co:promote`
-
-**`/co:review`**（每 5 次会话运行一次）：
-- 读取 `.eval-scores.jsonl` + `.error-log.jsonl`
-- 找出重复出现（2+ 次）的弱点或错误根因
-- 对每个候选项打晋升评分：Durability + Impact + Scope（各 0-3 分）
-- **总分 ≥ 6 → 晋升到 SKILL.md**；4-5 → 观察；≤ 3 → 忽略
-
-**`/co:promote`**（将学到的规律写入 SKILL.md）：
-- 从描述性 → 规范性：
-  - ❌ "Codex 总是跑偏因为说明不够明确"
-  - ✅ "任务说明超 200 词必须先压缩，否则 Codex 会漫游"
-- 晋升后删除对应 error-log 条目，避免噪音积累
-
-**棘轮规则**：只有下一次会话评分改善了对应弱点，才确认保留该 SKILL.md 改动。否则回滚。
-
----
-
-### 数据文件
-
-| 文件 | 用途 |
+失败立即写入 `.error-log.jsonl`：
+| 类型 | 触发 |
 |------|------|
-| `.eval-scores.jsonl` | 双轴评分历史，防通胀检测 |
-| `.error-log.jsonl` | Codex 失败与协调错误日志 |
-| `results.tsv` | 会话级汇总记录（兼容旧格式）|
+| `dispatch` | task spec 太模糊，Codex 跑偏 |
+| `conflict` | 双 Agent 文件冲突 |
+| `integration` | Codex 输出被拒 |
+| `scope-creep` | Codex 改了范围外文件 |
+| `token` | 压缩无效 |
+
+### Layer 3 — 审查 + 晋升 `/co:review` + `/co:promote`
+
+- 每 5 会话扫日志，找 2+ 次重复的弱点/根因
+- 候选打分：Durability + Impact + Scope（各 0–3）
+- **总分 ≥ 6 → 晋升到 SKILL.md**；4–5 观察；≤ 3 忽略
+- 描述性 → 规范性：❌"Codex 总跑偏" → ✅"spec > 200 词必须先压缩"
+- **棘轮规则：** 下一次同维度评分改善才保留，否则回滚
+
+### 自主循环 `/co:loop`
+
+- 运行 `/co:eval` + `/co:review` → 候选 ≥ 6 → `/co:promote` → commit
+- `ScheduleWakeup` 270s（保持在 cache TTL 内）调度下一轮
+- 绝不主动停止询问——持续到被中断
+
+**策略升级：** 5/8/12/15+ 轮卡同一弱点 → 微调 / 段重写 / 激进重构 / 标记用户。
+
+### 知识复利 `/co:compound`
+
+**Full 模式 4 个并行 subagent：**
+| Agent | 职责 |
+|-------|------|
+| Context Analyzer | 分类 problem_type、track、suggest filename |
+| Solution Extractor | Bug 轨道或 Knowledge 轨道提取 |
+| Related Docs Finder | `docs/solutions/` 搜索重叠，打分 High/Moderate/Low |
+| Session Historian | 搜历史会话（`~/.claude/projects/` + `~/.codex/sessions/`） |
+
+**Phase 2 重叠决策：** High → 更新旧文档；Moderate → 新文档 + flag；Low → 新文档。
+**Phase 2.5 选择性 Refresh（内联 5 步）：** 读冲突文档 → 引用原文 → 标 Superseded → 追加 Changelog → 不重写。
+**发现性检查：** 确保 AGENTS.md/CLAUDE.md 有指向 `docs/solutions/` 的一行。
+
+### `/co:sessions` — 跨会话历史检索
+
+通过内置 Agent tool 派发 general-purpose subagent，扫历史会话找：prior approaches、dead ends、key decisions。避免重复跑失败的路。
 
 ---
 
-## OpenSpace 子系统集成
+## Invocation Prompts（不是已注册的 slash command）
 
-参考 [HKUDS/OpenSpace](https://github.com/HKUDS/OpenSpace) 的三个核心子系统：
+> **注意：** 下表的 `/co:*` 是 **记忆 prompt**，不是已注册的 Claude Code 命令。在聊天里输入 `/co:eval` 或"跑 co:eval"，CC 按 SKILL.md 里对应章节执行。不会出现在命令补全里。
 
-### Smart Tool RAG（中途技能检索）
-
-当 CC 或 Codex 执行到一半遇到瓶颈时，自动触发双阶段技能检索：
-
-```
-BM25 粗排（name+description+body[:2000]）
-    ↓  top candidates
-Semantic 精排（概念相似度 + 质量信号过滤）
-    ↓  best match
-注入技能指导，继续执行
-```
-
-触发条件：
-- 同一错误类型 Codex 任务被拒两次
-- CC 对 worktree / 压缩 / 集成步骤不确定
-- 任务涉及新领域/框架
-
-质量过滤：`.eval-scores.jsonl` 中 `dispatch`/`integration` 错误 ≥ 2 次的候选技能降权。
-
----
-
-### Codex 质量追踪
-
-每次 Codex dispatch 后记录到 `.codex-quality.jsonl`：
-
-| 指标 | 健康 | 警告 | 行动 |
-|------|------|------|------|
-| 成功率 | ≥ 70% | 40–70% | 收紧 spec 模板 |
-| 平均 spec 字数 | < 150 | > 200 | 发送前压缩 |
-| 连续失败 | 0–2 | 3+ | 暂停派发，诊断根因 |
-
-**惩罚因子**（来自 OpenSpace ToolQualityRecord 设计）：
-- 成功率 < 40% → 强制要求 spec 显式列出所有文件，范围减半，扩展 off-limits
-- 连续 3+ 次失败 → 硬停止，不再派发 Codex，直到找到根因
-
-**语义失败注入**：集成阶段发现 scope-creep / 尺寸违规 / 无关改动 → 记为 `rejected`，与硬失败同权重计入成功率。
-
-**自动触发**：每 5 次 dispatch 检查质量，若触及警告阈值 → 提前运行 `/co:review`，不等 5 次会话周期。
-
----
-
-### 派发安全门
-
-每次 Codex dispatch 前扫描 task spec，输出安全检查报告：
-
-```
-[Security] Scanning task spec...
-Blocked patterns: [none / list]
-High-risk patterns: [none / list]
-Scope: [declared files]
-Verdict: safe-to-dispatch / requires-confirmation / blocked
-```
-
-**默认封锁（只允许 CC 执行）：**
-- 数据库迁移 / 环境变量修改 / 包依赖文件 / CI/CD 管道 / 密钥 / 强制删除 / git 历史改写
-
-**高风险（需用户明确确认，以正常文字展示警告，不用 caveman）：**
-- 批量文件重命名 / 跨模块 import / 测试套件修改 / 共享配置文件
-
-**范围执行**：Codex 只能写 `Scope:` 内的文件。输出触碰 `Off-limits:` 或 `Scope:` 以外的文件 → 自动 `rejected`，记为 `scope-creep`。
+| Prompt | 时机 |
+|--------|------|
+| `/co:think` | 复杂/模糊任务前置思考 |
+| `/co:plan-review` | Execution Plan 草拟后战略审核 |
+| `/co:eval` | 每次会话结束评分 |
+| `/co:review` | 每 5 会话回顾错误日志 |
+| `/co:promote` | `/co:review` 识别出 ≥ 6 分候选后晋升 |
+| `/co:loop` | 开启自主后台打磨循环 |
+| `/co:compound` | 解决非平凡问题后沉淀知识 |
+| `/co:sessions` | 开工前检索历史会话 |
 
 ---
 
@@ -317,10 +407,44 @@ Verdict: safe-to-dispatch / requires-confirmation / blocked
 | 文件 | 用途 |
 |------|------|
 | `.eval-scores.jsonl` | 双轴评分历史，防通胀检测 |
-| `.error-log.jsonl` | Codex 失败与协调错误日志 |
-| `.codex-quality.jsonl` | 每次 Codex dispatch 质量记录（成功率、惩罚因子输入）|
-| `results.tsv` | 会话级汇总记录 |
-| `.tasks/` | 并行任务板（原子认领，防止双写）|
+| `.error-log.jsonl` | 错误捕获日志（5 类） |
+| `.codex-quality.jsonl` | 每次 Codex dispatch 质量记录 |
+| `results.tsv` | 会话级汇总（兼容旧格式） |
+| `.tasks/*.json` | 并行任务板，原子认领 |
+
+---
+
+## Codex 任务说明模板（旧版兼容）
+
+如不使用 XML 结构化 prompt，简化模板也可用：
+
+```
+Goal: [一句话目标]
+Scope: [可以改的文件/目录]
+Off-limits: [不能动的文件]
+Subagents: yes/no
+Worktree: yes/no → branch: [名称]
+Deliver: 改动摘要、修改文件、测试结果、风险点、待确认问题
+Tone: 内联压缩 full
+```
+
+但新实现推荐 XML 格式——Codex 对结构化 prompt 执行更稳定。
+
+---
+
+## 集成阶段输出
+
+```
+## Integration
+Modified: [文件列表]
+Overlaps: [none / 冲突列表]
+Regressions: [none / 描述]
+Tests: [通过/失败摘要]
+Size violations: [none / >500 行新文件]
+Verdict: ready / needs-fix / codex-rejected
+```
+
+**Pre-push 强制：** push 前问用户"是否需要触发一次全量代码审核？"
 
 ---
 
@@ -330,97 +454,41 @@ Verdict: safe-to-dispatch / requires-confirmation / blocked
 |------|---------|
 | `superpowers:using-git-worktrees` | worktree 创建与管理 |
 | `superpowers:dispatching-parallel-agents` | 并行 subagent 分发 |
-| `codex:codex-cli-runtime` | Codex 任务底层调用 |
-| `caveman` | token 压缩模式 |
-| `darwin-skill` | 自我进化评分灵感 |
-| `alirezarezvani/claude-skills: self-eval` | 双轴评分矩阵 + 魔鬼辩护机制 |
+| `codex:codex-rescue` / `codex-companion.mjs` | Codex 任务底层调用 |
+| `JuliusBrussee/caveman` | token 压缩模式 |
+| `alchaincyf/darwin-skill` | 自我进化评分灵感 |
+| `alirezarezvani/claude-skills: self-eval` | 双轴评分矩阵 + 魔鬼辩护 |
 | `alirezarezvani/claude-skills: self-improving-agent` | 错误捕获 + 晋升生命周期 |
-| `karpathy/autoresearch` | 锁定评估器、简洁性原则、策略升级、自主不间断循环 |
+| `karpathy/autoresearch` | 锁定评估器、简洁性原则、策略升级、永不停止循环 |
 | `rohitg00/pro-workflow` | learn-rule 快速捕获、context 预算分阶段、compact-guard |
-| `shareAI-lab/learn-claude-code` | agent harness（任务板 + 心跳 + cron + 身份重注入）|
-| `HKUDS/OpenSpace: skill_engine` | Smart Tool RAG（BM25+embedding 双阶段检索 + 质量过滤）|
-| `HKUDS/OpenSpace: quality` | Codex 质量追踪（成功率、滚动窗口、惩罚因子、语义失败注入）|
-| `HKUDS/OpenSpace: security` | 派发安全门（危险模式检测、范围执行、用户确认门控）|
-
----
-
-## Token 与 Context 管理
-
-### 上下文预算（分阶段）
-
-| 阶段 | 目标用量 | 超出时的行动 |
-|------|---------|------------|
-| Phase 0（规划） | < 20% | 缩短计划输出 |
-| 并行执行 | < 60% | 在 Codex 派发间隙 compact |
-| 集成 | < 80% | 将 review 委托给 subagent |
-| 最终 review/push | < 90% | `/resume` 开新会话 |
-
-### compact-guard（compaction 前必做）
-
-compaction 后只有 5 个文件能恢复，提前保存：
-1. 当前任务（一句话）
-2. CC 和 Codex 正在修改的文件
-3. 活跃 Codex 任务说明
-4. 本次会话做出的决策
-5. compact 后的下一步
-
-**身份重注入**（compaction 恢复后）：
-> "You are Claude Code acting as Tech Lead for [project]. Codex is handling [scope]. Next: [step]."
-
-不重注入则 CC 会丢失编排上下文，可能重复 Codex 的工作。
-
----
-
-## 任务板（多 Codex 并行安全）
-
-派发 2+ 个 Codex 任务时，用 `.tasks/` 目录防止重复认领：
-
-```json
-{"id": 1, "subject": "implement login UI", "scope": "src/ui/auth/", "status": "pending", "owner": null}
-```
-
-CC 在派发前原子性地设置 `owner` + `status: in_progress`。集成阶段审计 `.tasks/` 确认无重叠。
-
-**learn-rule 快速通道**：Codex 在同一会话内犯同一错误 2 次 → 立即捕获：
-```
-[LEARN] Category: Rule
-Mistake: What went wrong
-Correction: What to do instead
-```
-追加到当前 Codex 任务说明，同时写入 `.error-log.jsonl` 等待 Layer 3 晋升。
-
----
-
-## 自主优化循环（`/co:loop`）
-
-参考 karpathy/autoresearch 的"NEVER STOP"思路 + learn-claude-code 的 cron/heartbeat：
-
-1. 运行 `/co:eval` + `/co:review`
-2. 找到候选项（晋升评分 ≥ 6）→ `/co:promote` → git commit
-3. 通过 `ScheduleWakeup`（270s，保持在 cache TTL 内）调度下一轮
-4. 重复，直到无候选项或用户手动中断
-5. **绝不主动停止询问** — 持续运行直到被中断
-
-**策略升级**（同一弱点持续 N 次会话）：
-
-| 卡住轮数 | 升级策略 |
-|---------|---------|
-| 5 | 微调：只改失败的那句话/要点 |
-| 8 | 段落重写：重组整个失败段 |
-| 12 | 激进重构：重新思考该段的设计目的 |
-| 15+ | 标记给用户：可能存在结构性设计缺陷 |
-
-**锁定评估器**（来自 karpathy/autoresearch）：Layer 1 评分矩阵不可修改——不允许因分数不舒服而修改矩阵。想争议评分只能走魔鬼辩护，不能改矩阵。
-
-**简洁性原则**：同等评分下优先保留更短的改动。删除文字且分数不变 = 胜利。
+| `shareAI-lab/learn-claude-code` | agent harness（任务板 + 心跳 + cron + 身份重注入） |
+| `HKUDS/OpenSpace: skill_engine` | Smart Tool RAG（BM25+embedding 双阶段 + 质量过滤） |
+| `HKUDS/OpenSpace: quality` | Codex 质量追踪（滚动窗 + 惩罚因子 + 语义失败注入） |
+| `HKUDS/OpenSpace: security` | 派发安全门（危险模式检测、范围执行、用户确认门控） |
+| `openai/codex-plugin-cc` | Codex 调用协议（fg/bg、resume、effort、XML prompt） |
+| `EveryInc/compound-engineering-plugin` | 知识复利 4-subagent 流水线 |
+| `garrytan/gstack: office-hours` | 产品/技术双模式前置思考 |
+| `garrytan/gstack: plan-ceo-review` | CEO 级 4 模式计划审核 + Prime Directives |
+| `obra/superpowers` | 跨 harness 插件结构、skill 组织 |
+| `affaan-m/everything-claude-code` | 跨 harness 配置映射、AGENTS.md 通用基线 |
+| `addyosmani/agent-skills` | Hyrum/Beyoncé/Chesterton 等工程原则 + Common Rationalizations |
 
 ---
 
 ## 设计原则
 
-1. **先计划，再执行** — 不输出计划不写代码
-2. **所有权明确** — 每个文件只有一个写入者
-3. **token 意识** — 编排通信永远 caveman，代码永远正常
-4. **人在回路** — 计划确认、集成结论都等用户 review
-5. **自我修正** — 三层机制持续进化，锁定评估器防止作弊
-6. **永不停止** — 自主优化循环在背景持续运行，直到被中断
+1. **自包含** — 无强制外部插件依赖，可选插件仅增强不阻断
+2. **先计划，再执行** — 不输出计划不写代码
+3. **所有权明确** — 每个文件只有一个写入者
+4. **Token 意识** — 编排通信永远压缩，代码永远正常
+5. **人在回路最小化** — Codex Co-Decision 优先，只在 Codex 低置信度时升级用户
+6. **自我修正** — 三层机制持续进化，锁定评估器防止作弊
+7. **跨 harness** — AGENTS.md 为通用基线，每个 harness 有独立配置覆盖
+8. **永不停止** — `/co:loop` 背景持续运行，直到被中断
+
+---
+
+## 相关链接
+
+- GitHub: https://github.com/dy9759/claude-codex-orchestration
+- Issues: https://github.com/dy9759/claude-codex-orchestration/issues
