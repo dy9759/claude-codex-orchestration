@@ -61,6 +61,102 @@ fi
 
 ---
 
+## Session Start: AGENTS.md Bootstrap
+
+At session start, after Plugin Detection, check the project root for `AGENTS.md` and `CLAUDE.md`. AGENTS.md is the cross-harness source of truth; `CLAUDE.md` becomes a `@AGENTS.md` pointer so Claude Code reads the same file as Cursor / Codex / OpenCode.
+
+```bash
+PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$PROJECT_ROOT" || exit 0
+
+HAS_AGENTS=$([ -f AGENTS.md ] && echo yes || echo no)
+HAS_CLAUDE=$([ -f CLAUDE.md ] && echo yes || echo no)
+POINTER_LINE='@AGENTS.md'
+
+# Check if CLAUDE.md is already a pointer (only contains @AGENTS.md, ignoring blank/whitespace lines)
+is_pointer() {
+  [ -f CLAUDE.md ] && \
+  [ "$(grep -vE '^\s*$' CLAUDE.md | tr -d '[:space:]')" = "@AGENTS.md" ]
+}
+
+case "$HAS_AGENTS:$HAS_CLAUDE" in
+  yes:yes)
+    if is_pointer; then
+      echo "[AGENTS] OK — CLAUDE.md already points to @AGENTS.md"
+    else
+      echo "[AGENTS] WARN — both CLAUDE.md and AGENTS.md have content."
+      echo "         Review and consolidate; suggested: merge into AGENTS.md, reduce CLAUDE.md to '@AGENTS.md'."
+    fi
+    ;;
+  yes:no)
+    echo "$POINTER_LINE" > CLAUDE.md
+    echo "[AGENTS] Created CLAUDE.md → @AGENTS.md pointer"
+    ;;
+  no:yes)
+    # Migrate CLAUDE.md → AGENTS.md, preserve original as backup
+    cp CLAUDE.md CLAUDE.md.bak
+    mv CLAUDE.md AGENTS.md
+    echo "$POINTER_LINE" > CLAUDE.md
+    echo "[AGENTS] Migrated CLAUDE.md → AGENTS.md (backup: CLAUDE.md.bak)"
+    echo "         CLAUDE.md now points to @AGENTS.md"
+    ;;
+  no:no)
+    # Create minimal AGENTS.md template + pointer CLAUDE.md
+    cat > AGENTS.md <<'TEMPLATE'
+# Agents
+
+## Role Definitions
+
+- **Claude Code** — Tech Lead / Orchestrator. Owns repo exploration, architecture, backend, scripts, CI/CD, integration.
+- **Codex** — Parallel Implementer. Owns frontend, UI, isolated feature modules, parallel solution attempts, diff review.
+
+## Blocked File Patterns (Codex never writes these)
+
+- Database migrations (ALTER/DROP/CREATE TABLE)
+- `.env`, secrets, API keys
+- Package manifests (package.json, requirements.txt, go.mod, Cargo.toml)
+- CI/CD pipelines (.github/workflows/, Dockerfile, Makefile)
+- `rm -rf` / force-delete operations
+- Git history rewrites (rebase -i, reset --hard, push --force)
+
+## Workflow
+
+1. Plan → split CC/Codex ownership cleanly
+2. Parallel execute in worktrees if needed (`feature/<agent>-<desc>`)
+3. Integrate once — single writer per file at any moment
+4. Verify: tests + lint + type check before push
+
+## Referenced Docs
+
+- Skill: `~/.claude/skills/claude-codex-orchestration/SKILL.md`
+- Solved problems (if present): `docs/solutions/`
+TEMPLATE
+    echo "$POINTER_LINE" > CLAUDE.md
+    echo "[AGENTS] Created AGENTS.md (template) and CLAUDE.md → @AGENTS.md pointer"
+    ;;
+esac
+```
+
+**Safety notes:**
+- Migration creates `CLAUDE.md.bak` before overwriting — original never lost
+- If both files have content, do NOT auto-merge; warn and let user decide
+- `@AGENTS.md` pointer syntax is Claude Code's file reference — loads AGENTS.md into CC context
+- Never runs destructively on files the user didn't create via this skill
+
+---
+
+## **AGENTS.md Write Redirect (mandatory rule)**
+
+> **When writing agent instructions, rules, role definitions, or project conventions — always target `AGENTS.md`, never `CLAUDE.md`.**
+>
+> CLAUDE.md should remain the single line `@AGENTS.md` (or equivalent include directive). All new rule additions, skill references, blocked-pattern updates, role changes, and workflow documentation go into AGENTS.md.
+>
+> **Exception:** modifying the `@AGENTS.md` pointer in CLAUDE.md itself.
+>
+> **Rationale:** AGENTS.md is read by all four harnesses (Claude Code, Cursor, Codex, OpenCode). Writing to CLAUDE.md creates CC-only rules that other agents can't see, breaking cross-harness parity.
+
+---
+
 ## Token Budget Mode (Inline Compression)
 
 All **agent-internal communication** uses compressed prose to cut ~75% output tokens while preserving full technical substance. This applies to: execution plans, status updates, Codex task specs, inter-phase summaries, subagent briefs, and integration reports.
