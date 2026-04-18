@@ -206,25 +206,105 @@ If total gain < 30%: switch from `full` to `ultra` next session.
 
 ---
 
-## Self-Improvement Protocol (Darwin-Inspired)
+## Self-Correction System
 
-After each session, score (1-10):
+Three-layer mechanism: **evaluate → capture errors → promote learnings**.
 
-| Dimension | Measures |
-|-----------|----------|
-| Task split quality | Clean CC/Codex boundaries? |
-| Conflict avoidance | File ownership collisions? |
-| Plan clarity | Plan prevent ambiguity? |
-| Codex dispatch quality | Task spec tight enough? |
-| Integration smoothness | Rework needed? |
-| Token efficiency | Caveman level effective? |
+---
 
-Improve when any dimension ≤ 6 → rewrite that section.
-Ratchet: only keep edits that raise weakest dimension. Revert otherwise.
+### Layer 1: Session Self-Eval (`/co:eval`)
 
-Log to `~/.claude/skills/claude-codex-orchestration/results.tsv`:
-```tsv
-timestamp	task	split	conflict	plan	dispatch	integration	tokens	note
+Run after every orchestration session. Two-axis scoring — do NOT pick a number first.
+
+**Axis A — Orchestration Ambition** (what was attempted):
+- `Low` — routine task, clear split, no new coordination challenge
+- `Medium` — real coordination complexity, partial failure was possible
+- `High` — novel split, high-risk parallel work, significant integration challenge
+
+**Axis B — Execution Quality** (how well it went):
+- `Poor` — conflicts, rework, Codex output rejected, plan failed
+- `Adequate` — completed but with gaps, extra iterations needed
+- `Strong` — clean split, zero overlap, integration first-pass
+
+**Composite score matrix** (read it, do not override):
+
+|                        | Poor (1) | Adequate (2) | Strong (3) |
+|------------------------|:--------:|:------------:|:----------:|
+| **Low Ambition (1)**   |    1     |      2       |     2      |
+| **Medium Ambition (2)**|    2     |      3       |     4      |
+| **High Ambition (3)**  |    2     |      4       |     5      |
+
+**Devil's Advocate (mandatory before finalizing):**
+1. Case for LOWER — what was easier than it looked? What failure was avoided by luck?
+2. Case for HIGHER — what was genuinely hard? What coordination challenge was novel?
+3. Resolution — if either case changes an axis rating, re-rate and recompute. State final score + 1-sentence justification addressing both sides.
+
+**Anti-inflation check:** Read `.eval-scores.jsonl`. If 4+ of the last 5 scores are identical → flag clustering, force re-evaluation of current session.
+
+**Persist to** `~/.claude/skills/claude-codex-orchestration/.eval-scores.jsonl`:
+```json
+{"date":"YYYY-MM-DD","score":N,"ambition":"Low|Medium|High","execution":"Poor|Adequate|Strong","task":"1-sentence summary","weak_point":"dispatch|split|integration|tokens|none"}
 ```
 
-If 3+ sessions same weak dimension → that section needs full rewrite.
+---
+
+### Layer 2: Error Auto-Capture
+
+When Codex returns failure, task spec causes confusion, or integration is rejected — immediately log to `.error-log.jsonl`:
+
+```json
+{"date":"YYYY-MM-DD","category":"dispatch|conflict|integration|scope-creep|token","task_spec_words":N,"error":"1-sentence description","root_cause":"vague-scope|missing-boundary|no-verify-step|oversized-output|other"}
+```
+
+**Error categories:**
+| Category | What happened |
+|----------|--------------|
+| `dispatch` | Codex task spec was too vague — Codex wandered or asked for clarification |
+| `conflict` | File ownership collision — two agents touched same file |
+| `integration` | Codex output rejected — excess scope, size violation, or unintended changes |
+| `scope-creep` | Codex modified files outside its declared scope |
+| `token` | Caveman level didn't reduce output meaningfully |
+
+---
+
+### Layer 3: Review & Promote (`/co:review`, `/co:promote`)
+
+**`/co:review`** — run every 5 sessions or when `.eval-scores.jsonl` has 5+ entries:
+
+1. Read `.eval-scores.jsonl` + `.error-log.jsonl`
+2. Find recurring `weak_point` or `root_cause` (appears 2+ times)
+3. Check if SKILL.md already addresses it
+4. Score each candidate for promotion:
+
+| Dimension | 0 | 1 | 2 | 3 |
+|-----------|---|---|---|---|
+| **Durability** | One-time | Temporary | Stable pattern | Structural truth |
+| **Impact** | Nice-to-know | Saves iteration | Prevents conflict | Prevents breakage |
+| **Scope** | Single task | One phase | Whole skill | All orchestrations |
+
+**Promote if total ≥ 6.** Watch at 4-5. Ignore ≤ 3.
+
+**`/co:promote`** — distill and write the improvement into SKILL.md:
+
+Distillation rules (from descriptive to prescriptive):
+- ❌ "Codex kept asking about scope because the spec wasn't tight enough"
+- ✅ "If Codex task spec exceeds 200 words, compress before sending — vague specs cause wandering"
+
+- ❌ "We had a conflict on config.ts again"  
+- ✅ "config.ts is always CC-owned — never assign to Codex, even if task seems UI-only"
+
+After promoting: remove the source entries from `.error-log.jsonl` to prevent stale noise.
+
+**Ratchet rule:** Only keep SKILL.md edits where the promoted rule addresses a real recurrence (2+ log entries). Revert speculative additions.
+
+**Darwin loop:** After promoting, the next session scores the same dimension. If it improves → keep. If not → the rule was wrong, revert and reclassify.
+
+---
+
+### Slash Command Reference
+
+| Command | When to run |
+|---------|-------------|
+| `/co:eval` | End of every orchestration session |
+| `/co:review` | Every 5 sessions, or when `.eval-scores.jsonl` has 5+ new entries |
+| `/co:promote` | After `/co:review` identifies a promotion candidate with score ≥ 6 |

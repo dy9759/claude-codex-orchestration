@@ -173,23 +173,75 @@ Verdict: ready / needs-fix / codex-rejected
 
 ---
 
-## 自我进化（Darwin 机制）
+## 自我纠错与进化（三层机制）
 
-每次会话结束后，skill 对自身打分（1-10）：
+参考 `alirezarezvani/claude-skills` 中的 `self-eval` 和 `self-improving-agent` 设计。
 
-| 维度 | 衡量内容 |
-|------|---------|
-| 任务拆分质量 | CC/Codex 边界是否清晰？ |
-| 冲突避免 | 有无文件 ownership 冲突？ |
-| 计划清晰度 | 计划是否消除了歧义？ |
-| Codex 分发质量 | 任务说明是否足够紧凑？ |
-| 集成顺畅度 | 需要多少返工？ |
-| Token 效率 | Caveman 级别是否有效？ |
+---
 
-任何维度 ≤ 6 分 → 识别问题段落 → 重写。
-**棘轮规则：** 只保留能提升最低维度分数的改动，否则回滚。
+### Layer 1 — 会话自评 `/co:eval`
 
-评分记录在：`~/.claude/skills/claude-codex-orchestration/results.tsv`
+每次会话结束后运行。**双轴评分**，不允许直接选分数：
+
+**轴 A — 编排复杂度**（任务本身难度）：`Low / Medium / High`
+
+**轴 B — 执行质量**（结果好坏）：`Poor / Adequate / Strong`
+
+**固定矩阵出分**（不可覆盖）：
+
+|                        | Poor | Adequate | Strong |
+|------------------------|:----:|:--------:|:------:|
+| **Low Ambition**       |  1   |    2     |   2    |
+| **Medium Ambition**    |  2   |    3     |   4    |
+| **High Ambition**      |  2   |    4     |   5    |
+
+**强制魔鬼辩护**：评分前必须分别论证"为什么应该更低"和"为什么应该更高"，再解决分歧，才能最终确认分数。防止 AI 默认给 4 分的评分通胀。
+
+**防通胀检测**：读取 `.eval-scores.jsonl`，如果最近 5 次有 4 次相同分数 → 警告，强制重新评估。
+
+评分持久化到：`.eval-scores.jsonl`
+
+---
+
+### Layer 2 — 错误自动捕获
+
+Codex 返回失败、任务说明导致歧义、集成被拒时，立即记录到 `.error-log.jsonl`：
+
+| 错误类型 | 触发条件 |
+|---------|---------|
+| `dispatch` | Codex 任务说明太模糊，Codex 跑偏或要求澄清 |
+| `conflict` | 文件 ownership 冲突，两个 Agent 改了同一文件 |
+| `integration` | Codex 输出被拒，超出范围/超 500 行/有无关改动 |
+| `scope-creep` | Codex 改了不在声明范围内的文件 |
+| `token` | Caveman 级别未有效降低 token 消耗 |
+
+---
+
+### Layer 3 — 审查与晋升 `/co:review` / `/co:promote`
+
+**`/co:review`**（每 5 次会话运行一次）：
+- 读取 `.eval-scores.jsonl` + `.error-log.jsonl`
+- 找出重复出现（2+ 次）的弱点或错误根因
+- 对每个候选项打晋升评分：Durability + Impact + Scope（各 0-3 分）
+- **总分 ≥ 6 → 晋升到 SKILL.md**；4-5 → 观察；≤ 3 → 忽略
+
+**`/co:promote`**（将学到的规律写入 SKILL.md）：
+- 从描述性 → 规范性：
+  - ❌ "Codex 总是跑偏因为说明不够明确"
+  - ✅ "任务说明超 200 词必须先压缩，否则 Codex 会漫游"
+- 晋升后删除对应 error-log 条目，避免噪音积累
+
+**棘轮规则**：只有下一次会话评分改善了对应弱点，才确认保留该 SKILL.md 改动。否则回滚。
+
+---
+
+### 数据文件
+
+| 文件 | 用途 |
+|------|------|
+| `.eval-scores.jsonl` | 双轴评分历史，防通胀检测 |
+| `.error-log.jsonl` | Codex 失败与协调错误日志 |
+| `results.tsv` | 会话级汇总记录（兼容旧格式）|
 
 ---
 
@@ -201,7 +253,9 @@ Verdict: ready / needs-fix / codex-rejected
 | `superpowers:dispatching-parallel-agents` | 并行 subagent 分发 |
 | `codex:codex-cli-runtime` | Codex 任务底层调用 |
 | `caveman` | token 压缩模式（可选但推荐） |
-| `darwin-skill` | 自我进化评分机制来源 |
+| `darwin-skill` | 自我进化评分灵感来源 |
+| `alirezarezvani/claude-skills: self-eval` | 双轴评分矩阵 + 魔鬼辩护机制 |
+| `alirezarezvani/claude-skills: self-improving-agent` | 错误捕获 + 晋升生命周期设计 |
 
 ---
 
