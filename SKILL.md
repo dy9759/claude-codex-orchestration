@@ -82,33 +82,94 @@ Show plan. Wait for confirm. Then execute.
 
 ---
 
-## Dispatching Tasks to Codex (Caveman Format)
+## Codex Invocation Protocol
 
-Use `codex:codex-rescue` subagent. Task spec MUST be tight caveman prose:
+All Codex calls go through the `codex:codex-rescue` subagent, which wraps `codex-companion.mjs`.
 
-```
-Goal: [one-line objective]
-Scope: [files/dirs Codex may touch]
-Off-limits: [files Codex must NOT modify]
-Subagents: yes/no
-Worktree: yes/no → branch: [name]
-Deliver: change summary, files modified, test results, risks, open Qs
-Tone: caveman full — drop filler, fragments OK, code blocks normal
+### Foreground vs Background
+
+| Task profile | Mode | Why |
+|---|---|---|
+| Small, bounded, < 10 min | `foreground` | Blocks CC until done; simpler coordination |
+| Complex, multi-step, open-ended | `background` | Returns `job-id`; CC continues other work; retrieve with `result` |
+| Review / adversarial review | `foreground` | Structured output, expect immediate feedback |
+
+Use the built-in `review` or `adversarial-review` commands for reviewing git diffs — do not write a custom review `task` prompt; the built-in contracts are better.
+
+### Thread Persistence and Resume
+
+Every task starts a named thread (Codex persists it). Decide before dispatching:
+- **Fresh task** → no `--resume-last` (new thread)
+- **Follow-up on same Codex work** ("continue", "keep going", "dig deeper", "apply the top fix") → add `--resume-last`; send only the delta instruction, not the full prompt again
+- **Force fresh despite prior thread** → add `--fresh` explicitly
+
+### Write Mode and Effort
+
+| Task type | Flags | Sandbox |
+|---|---|---|
+| Implementation, bug fix | `--write` | `workspace-write` |
+| Review, diagnosis, research | *(none)* | `read-only` |
+| Effort — simple UI | `--effort low` | — |
+| Effort — complex backend/arch | `--effort high` | — |
+| Effort — deep diagnosis | `--effort xhigh` | — |
+
+Default: no `--effort` (Codex chooses). Only set when task complexity is clear.
+
+### Structured Prompt Format (XML — not caveman for Codex)
+
+Codex prompts use XML block structure, not caveman prose. Prompt Codex like an **operator, not a collaborator**:
+
+```xml
+<task>
+  Concrete job + relevant repo/failure context. One task per run.
+  State what "done" looks like explicitly.
+</task>
+
+<structured_output_contract>
+  Exact shape, ordering, brevity requirements for the response.
+  E.g.: "Return: changed files list, test results, risk flags, open questions."
+</structured_output_contract>
+
+<default_follow_through_policy>
+  What Codex should do instead of asking routine questions.
+  E.g.: "If a file is missing, create it. If a test fails, fix it."
+</default_follow_through_policy>
+
+<!-- Add only what the task needs: -->
+<verification_loop>Required for implementation/debug — run tests, verify fix.</verification_loop>
+<grounding_rules>Required for review — cite file+line, no unsupported claims.</grounding_rules>
+<action_safety>For write-capable runs — stay narrow, avoid unrelated refactors.</action_safety>
 ```
 
-Invoke:
-```
-subagent_type: "codex:codex-rescue"
-prompt: [compressed task spec above]
-```
+Checklist before sending:
+1. `<task>` defines exact scope and done-state
+2. Smallest output contract that makes the answer usable
+3. Add `<verification_loop>` for any implementation task
+4. Add `<grounding_rules>` for any review task
+5. Remove redundant instructions — prefer tighter contracts over longer prose
 
-**Token rule:** Codex task specs must be <200 words. If draft exceeds that, compress before sending.
+**Token rule:** Final prompt <200 words. If over, remove redundant instructions first; compress prose only as last resort.
+
+### Result Handling (from codex-result-handling)
+
+- Present Codex findings as-is: preserve verdict, severity order, file paths, evidence boundaries
+- After presenting review findings: **STOP**. Do not fix anything. Explicitly ask which issues the user wants addressed
+- If Codex run failed: report the failure and stop — do not generate a substitute CC answer
+- If Codex was never invoked: return nothing, do not improvise
+
+---
+
+## Smart Tool RAG (Mid-Session Skill Retrieval)
 
 ---
 
 ## Smart Tool RAG (Mid-Session Skill Retrieval)
 
 When CC or Codex hits a wall mid-execution — current approach not working, domain knowledge missing — before asking the user, run a skill retrieval pass against `~/.claude/skills/`:
+
+**Retrieval sources (search both):**
+- `~/.claude/skills/` — reusable skill guides
+- `docs/solutions/` — project-specific solved problems (see Knowledge Compounding below)
 
 **Two-stage pipeline (mirrors OpenSpace SkillRanker):**
 1. **BM25 stage** — tokenize task description, score all skills on `name + description + body[:2000]`. Keep top candidates. If total skills ≤ 10, skip to stage 2 directly.
@@ -457,3 +518,74 @@ After promoting: remove the source entries from `.error-log.jsonl` to prevent st
 | `/co:review` | Every 5 sessions, or when `.eval-scores.jsonl` has 5+ new entries |
 | `/co:promote` | After `/co:review` identifies promotion candidate with score ≥ 6 |
 | `/co:loop` | Start autonomous background refinement (cron-based, runs while user is away) |
+| `/co:compound` | After any session that resolves a non-trivial problem |
+| `/co:sessions` | Before starting complex work — search prior sessions for dead ends |
+
+---
+
+## Knowledge Compounding (`/co:compound`)
+
+**Why:** First time solving a problem = research. Document it → next occurrence = minutes. Knowledge compounds exponentially across sessions, repos, and agents.
+
+**Trigger:** After any orchestration session that resolves a non-trivial coordination problem, Codex failure pattern, or integration challenge — capture it while context is fresh.
+
+### `/co:compound` — Two Modes
+
+Ask user before proceeding (never pre-select):
+```
+1. Full — parallel subagents, session history cross-reference, overlap detection
+2. Lightweight — single pass, faster, fewer tokens. Best for simple fixes or near context limit.
+```
+
+### Full Mode Phases
+
+**Phase 0.5: Auto Memory Scan**
+Check MEMORY.md for entries relevant to the problem. Pass any matches as supplementary context to Phase 1 agents (not primary evidence — conversation history takes priority).
+
+**Phase 1 (parallel subagents, all return text — no file writes):**
+
+| Agent | Job |
+|-------|-----|
+| Context Analyzer | Extract problem type (bug vs knowledge), classify track, suggest filename `[slug]-[date].md`, map to `docs/solutions/[category]/` |
+| Solution Extractor | Bug track: Problem → Symptoms → What Didn't Work → Solution → Why → Prevention. Knowledge track: Context → Guidance → Why It Matters → When to Apply → Examples |
+| Related Docs Finder | Search `docs/solutions/` for overlap. Score: High (4-5 dims match), Moderate (2-3), Low (0-1). Flag stale docs |
+| Session Historian | Search `~/.claude/projects/`, `~/.codex/sessions/` for prior investigations of this problem. Return: prior approaches, dead ends, key decisions. Dispatch foreground (accesses files outside working dir) |
+
+**Phase 2: Assembly**
+
+Overlap decision:
+- **High** → update existing doc (not duplicate). Preserve path, add `last_updated:`
+- **Moderate** → create new, flag for consolidation review
+- **Low** → create new normally
+
+Write to `docs/solutions/[category]/[slug]-[date].md` with YAML frontmatter:
+```yaml
+---
+title: [problem title]
+date: YYYY-MM-DD
+problem_type: bug|knowledge
+module: [affected module]
+tags: [relevant tags]
+---
+```
+
+**Phase 2.5: Selective Refresh Check**
+If new solution contradicts an older doc → run `ce:compound-refresh` with narrow scope. Only invoke when evidence is clear (doc recommends approach the new fix contradicts, or major refactor touched referenced files).
+
+**Discoverability Check (always runs)**
+After writing: verify AGENTS.md or CLAUDE.md points agents to `docs/solutions/`. If not, add one line in the nearest relevant section:
+```
+docs/solutions/  # solved problems (bugs, patterns, workflow), organized by category with YAML frontmatter
+```
+This ensures knowledge compounds — agents find it on next encounter.
+
+### `/co:sessions` — Session History Search
+
+Before starting complex work: search prior Claude/Codex sessions for the same repo.
+```
+Dispatch: compound-engineering:research:session-historian
+Query: [specific problem description — not generic topic]
+Include: current branch, working directory
+Output: prior approaches, dead ends, key decisions, related context
+```
+Use to avoid repeating failed approaches from prior sessions.
