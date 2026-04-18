@@ -16,10 +16,12 @@ Ask user before proceeding (never pre-select):
 
 ## Full Mode Phases
 
-**Phase 0.5: Auto Memory Scan**
-Check MEMORY.md for entries relevant to the problem. Pass any matches as supplementary context to Phase 1 agents (not primary evidence — conversation history takes priority).
+*(These are internal phases of `/co:compound` — unrelated to the main orchestration Phase 0.)*
 
-**Phase 1 (parallel subagents, all return text — no file writes):**
+**Compound Step A: Auto Memory Scan**
+Check MEMORY.md for entries relevant to the problem. Pass any matches as supplementary context to Step B agents (not primary evidence — conversation history takes priority).
+
+**Compound Step B (parallel subagents, all return text — no file writes):**
 
 | Agent | Job |
 |-------|-----|
@@ -28,7 +30,7 @@ Check MEMORY.md for entries relevant to the problem. Pass any matches as supplem
 | Related Docs Finder | Search `docs/solutions/` for overlap. Score: High (4-5 dims match), Moderate (2-3), Low (0-1). Flag stale docs |
 | Session Historian | Search `~/.claude/projects/`, `~/.codex/sessions/` for prior investigations of this problem. Return: prior approaches, dead ends, key decisions. Dispatch foreground (accesses files outside working dir) |
 
-**Phase 2: Assembly**
+**Compound Step C: Assembly**
 
 Overlap decision:
 - **High** → update existing doc (not duplicate). Preserve path, add `last_updated:`
@@ -46,7 +48,7 @@ tags: [relevant tags]
 ---
 ```
 
-**Phase 2.5: Selective Refresh Check** (inline, no external plugin)
+**Compound Step D: Selective Refresh Check** (inline, no external plugin)
 If the new solution contradicts an older doc → refresh it inline. Only trigger when evidence is clear.
 
 Steps:

@@ -32,6 +32,23 @@ Deep content lives in `references/` — load only when needed. CC reads this ind
 
 ---
 
+## Data File Lifecycle
+
+Per-user session state — **auto-created on first use**, `.gitignore`d, never committed.
+
+| File | Written by | Read by | Purpose |
+|------|-----------|---------|---------|
+| `.eval-scores.jsonl` | `/co:eval` at session end | `/co:review`, Smart Tool RAG quality filter | Two-axis score history, anti-inflation detection |
+| `.error-log.jsonl` | Codex failure / integration rejection / Learn-Rule fast path | `/co:review`, Smart Tool RAG quality filter | Error capture, recurrence detection for Layer 3 promotion |
+| `.codex-quality.jsonl` | Every Codex dispatch result | Quality tracking (rolling 20-window), auto-evolve trigger | Dispatch success rate, penalty factor, hard-stop gate |
+| `.tasks/*.json` | CC before parallel Codex dispatch | Both agents during execution; CC at integration audit | Atomic task claiming, owner field prevents double-writes |
+
+**First session:** files don't exist yet. First `/co:eval` creates `.eval-scores.jsonl` with one entry. First Codex failure creates `.error-log.jsonl`. Empty files silently no-op in quality filters (no rolling window data = no penalty).
+
+**Reset state:** `rm ~/.claude/skills/claude-codex-orchestration/.{eval-scores,error-log,codex-quality}.jsonl` to start fresh.
+
+---
+
 ## Session Start: Optional Plugin Detection
 
 At session start, scan `~/.claude/plugins/installed_plugins.json` for optional enhancements. Show hints **once per user** via a sentinel file.

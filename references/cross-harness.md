@@ -4,14 +4,29 @@ The orchestration pattern works across Claude Code, Cursor, Codex, and OpenCode.
 
 ## Harness Detection
 
-At session start, detect active harness:
+At session start, detect the **active** harness (which agent is currently running this skill), not just what's installed on the machine. Env vars are authoritative; filesystem is a fallback.
+
 ```bash
-if ls ~/.claude/skills/ &>/dev/null; then echo "HARNESS=claude-code"
-elif [[ -d .cursor || -f .cursorrules ]]; then echo "HARNESS=cursor"
-elif [[ -f .opencode/opencode.json ]]; then echo "HARNESS=opencode"
-elif command -v codex &>/dev/null; then echo "HARNESS=codex"
-fi
+detect_harness() {
+  # Stage 1 — env vars set by the harness process itself (authoritative)
+  [ -n "$CLAUDECODE" ] || [ -n "$CLAUDE_CODE_SESSION" ] && { echo "claude-code"; return; }
+  [ -n "$CURSOR_AGENT" ]    && { echo "cursor";     return; }
+  [ -n "$CODEX_SESSION_ID" ] && { echo "codex";      return; }
+  [ -n "$OPENCODE_SESSION" ] && { echo "opencode";   return; }
+
+  # Stage 2 — filesystem fallback (project-level hints, less reliable)
+  [ -f .cursorrules ] || [ -d .cursor ]    && { echo "cursor";   return; }
+  [ -f .opencode/opencode.json ]           && { echo "opencode"; return; }
+  [ -d ~/.claude/skills ]                  && { echo "claude-code"; return; }
+  command -v codex >/dev/null 2>&1         && { echo "codex";    return; }
+
+  echo "unknown"
+}
+
+HARNESS="$(detect_harness)"
 ```
+
+Filesystem detection is a *project-setup* signal (".cursorrules exists → project uses Cursor"), not a runtime signal. If running Codex CLI in a repo that also has a Claude Code setup, env vars disambiguate; without them, the fallback may misclassify.
 
 Announce harness once: `"Detected harness: [harness]. Applying matching config."` Then proceed.
 

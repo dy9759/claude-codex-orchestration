@@ -1,0 +1,13 @@
+# Per-user session state — auto-created on first use, do not commit
+.eval-scores.jsonl
+.error-log.jsonl
+.codex-quality.jsonl
+
+# Per-user sentinels
+.orch-plugin-hints-shown
+
+# OS / editor cruft
+.DS_Store
+*.swp
+*.swo
+*~
