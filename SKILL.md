@@ -106,6 +106,29 @@ prompt: [compressed task spec above]
 
 ---
 
+## Task Board (Multi-Codex Parallel Safety)
+
+When dispatching 2+ Codex tasks in parallel, use a task board to prevent double-claiming:
+
+**Directory:** `.tasks/` in repo root. Each task is a JSON file:
+```json
+{"id": 1, "subject": "implement login UI", "scope": "src/ui/auth/", "status": "pending", "owner": null}
+```
+
+**Claim rule:** CC assigns `owner` + sets `status: "in_progress"` atomically before dispatching to Codex. No task gets two owners. If Codex finishes early and grabs a new task — it must read `.tasks/` and claim explicitly. CC audits `.tasks/` at integration to verify no overlaps.
+
+**Status lifecycle:** `pending` → `in_progress` → `completed` | `rejected`
+
+**Learn-Rule fast path:** If Codex makes the same mistake twice within a session, capture immediately:
+```
+[LEARN] Category: Rule (one line)
+Mistake: What went wrong
+Correction: What to do instead
+```
+Add to active Codex task spec for remainder of session. Log to `.error-log.jsonl` for Layer 3 promotion.
+
+---
+
 ## Worktree Rules
 
 Create when:
@@ -191,18 +214,36 @@ Steps:
 
 ---
 
-## Token Accounting (Per Session)
+## Token & Context Budget (Per Session)
 
-Track at session end:
+**Phase-based context thresholds** — if over limit, act immediately:
 
+| Phase | Context target | Action if over |
+|-------|---------------|----------------|
+| Phase 0 (planning) | < 20% | Keep plan output shorter |
+| Parallel execution | < 60% | Compact between Codex dispatches |
+| Integration | < 80% | Delegate review to subagent |
+| Final review / push | < 90% | Start fresh session via `/resume` |
+
+**compact-guard** — before any `/compact`, save to a scratch file (only 5 files survive compaction):
+1. Current task — one sentence
+2. Files in progress — which files CC and Codex are editing
+3. Active Codex task specs
+4. Decisions made this session
+5. Next step immediately post-compact
+
+**Identity re-injection** — after compaction resumes, CC must reinject:
+> "You are Claude Code acting as Tech Lead for [project]. Current task: [task]. Codex is handling: [scope]. Next: [step]."
+
+Without re-injection, CC loses orchestration context and may duplicate Codex work.
+
+**Token accounting:**
 ```
-Input tokens saved: [estimate from compress runs]
-Output tokens saved: [caveman level × message count estimate]
-Codex dispatch tokens: [task spec word count × dispatches]
+Input tokens saved: [compress runs estimate]
+Output tokens saved: [caveman level × messages]
 Total efficiency gain: [rough %]
 ```
-
-If total gain < 30%: switch from `full` to `ultra` next session.
+If gain < 30% → switch `full` → `ultra` next session.
 
 ---
 
@@ -297,7 +338,27 @@ After promoting: remove the source entries from `.error-log.jsonl` to prevent st
 
 **Ratchet rule:** Only keep SKILL.md edits where the promoted rule addresses a real recurrence (2+ log entries). Revert speculative additions.
 
-**Darwin loop:** After promoting, the next session scores the same dimension. If it improves → keep. If not → the rule was wrong, revert and reclassify.
+**Simplicity criterion** (from karpathy/autoresearch): When two rewrites achieve the same score, keep the shorter one. Deleting text + equal score = win. Never add words to fix a weak score if removing words achieves the same result.
+
+**Locked evaluator**: The Layer 1 scoring matrix is immutable — do NOT modify the matrix when it produces an uncomfortable score. Modifying the evaluator to game your own score invalidates all history. If the score seems wrong, argue via devil's advocate, not by editing the matrix.
+
+**Strategy escalation** — if the same `weak_point` persists for 5+ consecutive sessions:
+
+| Stuck sessions | Escalate to |
+|---------------|-------------|
+| 5 | Micro-fix: rewrite only the failing bullet/sentence |
+| 8 | Section rewrite: restructure the whole failing section |
+| 12 | Radical restructure: reconsider the section's purpose entirely |
+| 15+ | Flag to user: this skill may have a structural design flaw |
+
+**Autonomous cron loop** — for background skill refinement (while user is away):
+1. CC runs `/co:eval` + `/co:review`
+2. If promotion candidate found (score ≥ 6): run `/co:promote`, git commit
+3. Schedule next cycle via `ScheduleWakeup` (270s — stays within cache TTL)
+4. Repeat until: no candidates found, or user interrupts
+5. Never stop asking to continue — run indefinitely until manually interrupted
+
+**Darwin loop:** After promoting, next session scores same dimension. Improves → keep. Doesn't → rule was wrong, revert and reclassify root cause.
 
 ---
 
@@ -307,4 +368,5 @@ After promoting: remove the source entries from `.error-log.jsonl` to prevent st
 |---------|-------------|
 | `/co:eval` | End of every orchestration session |
 | `/co:review` | Every 5 sessions, or when `.eval-scores.jsonl` has 5+ new entries |
-| `/co:promote` | After `/co:review` identifies a promotion candidate with score ≥ 6 |
+| `/co:promote` | After `/co:review` identifies promotion candidate with score ≥ 6 |
+| `/co:loop` | Start autonomous background refinement (cron-based, runs while user is away) |

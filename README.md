@@ -245,17 +245,92 @@ Codex 返回失败、任务说明导致歧义、集成被拒时，立即记录�
 
 ---
 
-## 与其他 skill 的关系
+## 设计灵感与参考来源
 
-| Skill | 关系 |
-|-------|------|
+| 来源 | 借鉴内容 |
+|------|---------|
 | `superpowers:using-git-worktrees` | worktree 创建与管理 |
 | `superpowers:dispatching-parallel-agents` | 并行 subagent 分发 |
 | `codex:codex-cli-runtime` | Codex 任务底层调用 |
-| `caveman` | token 压缩模式（可选但推荐） |
-| `darwin-skill` | 自我进化评分灵感来源 |
+| `caveman` | token 压缩模式 |
+| `darwin-skill` | 自我进化评分灵感 |
 | `alirezarezvani/claude-skills: self-eval` | 双轴评分矩阵 + 魔鬼辩护机制 |
-| `alirezarezvani/claude-skills: self-improving-agent` | 错误捕获 + 晋升生命周期设计 |
+| `alirezarezvani/claude-skills: self-improving-agent` | 错误捕获 + 晋升生命周期 |
+| `karpathy/autoresearch` | 锁定评估器、简洁性原则、策略升级、自主不间断循环 |
+| `rohitg00/pro-workflow` | learn-rule 快速捕获、context 预算分阶段、compact-guard |
+| `shareAI-lab/learn-claude-code` | agent harness（任务板 + 心跳 + cron + 身份重注入）|
+
+---
+
+## Token 与 Context 管理
+
+### 上下文预算（分阶段）
+
+| 阶段 | 目标用量 | 超出时的行动 |
+|------|---------|------------|
+| Phase 0（规划） | < 20% | 缩短计划输出 |
+| 并行执行 | < 60% | 在 Codex 派发间隙 compact |
+| 集成 | < 80% | 将 review 委托给 subagent |
+| 最终 review/push | < 90% | `/resume` 开新会话 |
+
+### compact-guard（compaction 前必做）
+
+compaction 后只有 5 个文件能恢复，提前保存：
+1. 当前任务（一句话）
+2. CC 和 Codex 正在修改的文件
+3. 活跃 Codex 任务说明
+4. 本次会话做出的决策
+5. compact 后的下一步
+
+**身份重注入**（compaction 恢复后）：
+> "You are Claude Code acting as Tech Lead for [project]. Codex is handling [scope]. Next: [step]."
+
+不重注入则 CC 会丢失编排上下文，可能重复 Codex 的工作。
+
+---
+
+## 任务板（多 Codex 并行安全）
+
+派发 2+ 个 Codex 任务时，用 `.tasks/` 目录防止重复认领：
+
+```json
+{"id": 1, "subject": "implement login UI", "scope": "src/ui/auth/", "status": "pending", "owner": null}
+```
+
+CC 在派发前原子性地设置 `owner` + `status: in_progress`。集成阶段审计 `.tasks/` 确认无重叠。
+
+**learn-rule 快速通道**：Codex 在同一会话内犯同一错误 2 次 → 立即捕获：
+```
+[LEARN] Category: Rule
+Mistake: What went wrong
+Correction: What to do instead
+```
+追加到当前 Codex 任务说明，同时写入 `.error-log.jsonl` 等待 Layer 3 晋升。
+
+---
+
+## 自主优化循环（`/co:loop`）
+
+参考 karpathy/autoresearch 的"NEVER STOP"思路 + learn-claude-code 的 cron/heartbeat：
+
+1. 运行 `/co:eval` + `/co:review`
+2. 找到候选项（晋升评分 ≥ 6）→ `/co:promote` → git commit
+3. 通过 `ScheduleWakeup`（270s，保持在 cache TTL 内）调度下一轮
+4. 重复，直到无候选项或用户手动中断
+5. **绝不主动停止询问** — 持续运行直到被中断
+
+**策略升级**（同一弱点持续 N 次会话）：
+
+| 卡住轮数 | 升级策略 |
+|---------|---------|
+| 5 | 微调：只改失败的那句话/要点 |
+| 8 | 段落重写：重组整个失败段 |
+| 12 | 激进重构：重新思考该段的设计目的 |
+| 15+ | 标记给用户：可能存在结构性设计缺陷 |
+
+**锁定评估器**（来自 karpathy/autoresearch）：Layer 1 评分矩阵不可修改——不允许因分数不舒服而修改矩阵。想争议评分只能走魔鬼辩护，不能改矩阵。
+
+**简洁性原则**：同等评分下优先保留更短的改动。删除文字且分数不变 = 胜利。
 
 ---
 
@@ -265,4 +340,5 @@ Codex 返回失败、任务说明导致歧义、集成被拒时，立即记录�
 2. **所有权明确** — 每个文件只有一个写入者
 3. **token 意识** — 编排通信永远 caveman，代码永远正常
 4. **人在回路** — 计划确认、集成结论都等用户 review
-5. **自我修正** — 每次会话后打分，弱项触发重写
+5. **自我修正** — 三层机制持续进化，锁定评估器防止作弊
+6. **永不停止** — 自主优化循环在背景持续运行，直到被中断
