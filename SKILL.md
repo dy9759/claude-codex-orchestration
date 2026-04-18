@@ -15,17 +15,19 @@ Claude Code = **Tech Lead / Orchestrator**. Codex = **Parallel Implementer**.
 
 ---
 
-## Token Budget Mode (Caveman Integration)
+## Token Budget Mode (Inline Compression)
 
-All **agent-internal communication** uses compressed caveman prose to cut ~75% output tokens while preserving full technical substance. This applies to: execution plans, status updates, Codex task specs, inter-phase summaries, subagent briefs, and integration reports.
+All **agent-internal communication** uses compressed prose to cut ~75% output tokens while preserving full technical substance. This applies to: execution plans, status updates, Codex task specs, inter-phase summaries, subagent briefs, and integration reports.
 
-**Default level: `full`** — drop articles/filler, fragments OK, short synonyms. Switch with `/caveman lite|full|ultra`.
+Compression is **inline style guidance** — no external plugin required. If the `caveman` plugin happens to be installed, CC may delegate to it; otherwise apply the rules below directly.
 
-| Level | Use when |
-|-------|----------|
-| `lite` | User needs readable plan output; remove filler only |
-| `full` | Default — classic caveman for all orchestration comms |
-| `ultra` | Max token pressure — abbreviate (DB/auth/fn/impl), arrows for causality (X → Y) |
+**Default level: `full`** — drop articles/filler, fragments OK, short synonyms. User may request `lite` or `ultra` by saying "switch to lite/ultra mode".
+
+| Level | Style rules |
+|-------|-------------|
+| `lite` | Remove filler words only; sentences stay full. Use when user needs readable plan output. |
+| `full` | Default. Drop articles (a/the/of), fragments OK, short synonyms (use → apply, perform → do). |
+| `ultra` | Max compression: abbreviate (DB/auth/fn/impl/env), use arrows for causality (X → Y), single words where phrases work. |
 
 **Never compress:**
 - Code blocks (always written normally)
@@ -33,8 +35,7 @@ All **agent-internal communication** uses compressed caveman prose to cut ~75% o
 - User-facing final deliverables that require clarity
 - Multi-step sequences where fragment order risks misread
 
-**Input token reduction:** Before starting a long session, suggest:
-> "Run `caveman:compress ~/.claude/CLAUDE.md` to cut input tokens ~46% per session."
+**Input token reduction:** If the `caveman` plugin is installed, running `caveman:compress ~/.claude/CLAUDE.md` cuts input tokens ~46% per session. This is optional — the skill works without it.
 
 ---
 
@@ -633,16 +634,18 @@ After promoting: remove the source entries from `.error-log.jsonl` to prevent st
 
 ---
 
-### Slash Command Reference
+### Invocation Prompts (not registered slash commands)
 
-| Command | When to run |
-|---------|-------------|
+> **Note:** `/co:*` below are **mnemonic prompts**, not registered Claude Code slash commands. Invoke them by typing the prompt (e.g., `/co:eval` or "run co:eval") in chat — CC then follows the matching section in this SKILL.md. They will NOT appear in Claude Code's command palette or autocomplete.
+
+| Prompt | When to invoke |
+|--------|---------------|
 | `/co:think` | Before complex/ambiguous tasks — clarify, challenge premises, optional Codex cold read |
 | `/co:plan-review` | After Execution Plan is drafted — CEO-mode review (EXPAND/SELECTIVE/HOLD/REDUCE) |
 | `/co:eval` | End of every orchestration session |
 | `/co:review` | Every 5 sessions, or when `.eval-scores.jsonl` has 5+ new entries |
 | `/co:promote` | After `/co:review` identifies promotion candidate with score ≥ 6 |
-| `/co:loop` | Start autonomous background refinement (cron-based, runs while user is away) |
+| `/co:loop` | Start autonomous background refinement (uses `ScheduleWakeup` built-in) |
 | `/co:compound` | After any session that resolves a non-trivial problem |
 | `/co:sessions` | Before starting complex work — search prior sessions for dead ends |
 
@@ -694,8 +697,15 @@ tags: [relevant tags]
 ---
 ```
 
-**Phase 2.5: Selective Refresh Check**
-If new solution contradicts an older doc → run `ce:compound-refresh` with narrow scope. Only invoke when evidence is clear (doc recommends approach the new fix contradicts, or major refactor touched referenced files).
+**Phase 2.5: Selective Refresh Check** (inline, no external plugin)
+If the new solution contradicts an older doc → refresh it inline. Only trigger when evidence is clear (the older doc recommends an approach the new fix contradicts, or a major refactor touched referenced files).
+
+Steps:
+1. Read the conflicting doc
+2. Identify the contradicted section (quote the exact paragraph)
+3. Mark it with `> **Superseded YYYY-MM-DD** — see [new-slug-date.md]`
+4. Append a "Changelog" entry at the bottom: date, what changed, why
+5. Do NOT rewrite the whole doc — narrow scope only
 
 **Discoverability Check (always runs)**
 After writing: verify AGENTS.md or CLAUDE.md points agents to `docs/solutions/`. If not, add one line in the nearest relevant section:
@@ -704,14 +714,17 @@ docs/solutions/  # solved problems (bugs, patterns, workflow), organized by cate
 ```
 This ensures knowledge compounds — agents find it on next encounter.
 
-### `/co:sessions` — Session History Search
+### `/co:sessions` — Session History Search (inline, no external plugin)
 
 Before starting complex work: search prior Claude/Codex sessions for the same repo.
+
+Dispatch via built-in Agent tool (`subagent_type: general-purpose`, `run_in_background: true`) with this brief:
 ```
-Dispatch: compound-engineering:research:session-historian
-Query: [specific problem description — not generic topic]
-Include: current branch, working directory
-Output: prior approaches, dead ends, key decisions, related context
+Search prior sessions for "[specific problem description — not generic topic]".
+Scope: ~/.claude/projects/ (CC sessions) and ~/.codex/sessions/ (Codex sessions).
+Filter: current repo path matches working directory, or branch name matches current branch.
+Return: prior approaches tried, dead ends + why they failed, key decisions + rationale,
+        related context. < 300 words. Include session date + file path for each finding.
 ```
 Use to avoid repeating failed approaches from prior sessions.
 
