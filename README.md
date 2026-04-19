@@ -201,7 +201,13 @@ Phase 0 理解 → Execution Plan 格式化 → 分派（边界清晰 → Codex�
 ### 8. 自我纠错与知识复利（4 层）
 
 #### Layer 0 — Skill Modification Score 🔥 v2026-04
-每次修改 `SKILL.md` / `references/*.md` / `CLAUDE.md.template` / AGENTS.md 模板后，自动按 8 维加权 rubric 打分，写入 git-tracked `.skill-scores.jsonl`。任一维度 -3 以上 → commit message 必须解释 tradeoff。
+每次修改 `SKILL.md` / `references/*.md` / `README.md` / `CLAUDE.md.template` / AGENTS.md 模板后，Layer 0 自动跑：
+
+**Step 1 — README 同步检查（新）**
+扫描本次 commit 改动的 skill 文件，grep README 是否引用，引用则 CC 语义对比描述是否仍准确。不准确 → **在同一 commit 更新 README**（优先），或 commit message 说明"README 未变，因为仅内部 X 改动，对外描述不变"。
+
+**Step 2 — 8 维加权打分**
+按下表 rubric 打分，写入 git-tracked `.skill-scores.jsonl`。任一维度 -3 以上 → commit message 必须解释 tradeoff。
 
 8 维权重（锁定不可改）：
 | 维度 | 权重 |
@@ -215,7 +221,9 @@ Phase 0 理解 → Execution Plan 格式化 → 分派（边界清晰 → Codex�
 | Engineering Rigor | 10% |
 | Usability | 5% |
 
-**当前分数：80.0/100**（`1d10c9d`，从 baseline 72.0 爬到 80.0 共 3 次正向修改）。
+**为什么 README 同步作为 Layer 0 的第一步？** README 跟 SKILL.md 脱节是用户对 doc 失去信任的首号原因；锁步更新在单个 commit 内完成，避免 GitHub 上出现"半更新"中间态。
+
+**当前分数：83.2/100**（`c2b8283`，从 baseline 72.0 爬到 83.2 共 5 次正向修改）。
 
 #### Layer 1 — Session Self-Eval `/co:eval`
 会话结束双轴评分（Ambition × Execution），3×3 锁定矩阵出分 1–5，Devil's Advocate 强制论证，防通胀检测。写 `.eval-scores.jsonl`。
@@ -270,12 +278,12 @@ Codex 失败 / 集成被拒 / learn-rule 触发 → `.error-log.jsonl` 5 类：d
 
 ## Session Start（自动执行）
 
-**首次调用时跑两件事（都有 sentinel 防重复）：**
+**首次调用时跑三件事（都有 sentinel 防重复）：**
 
 ### 1. Optional Plugin Detection
 读 `~/.claude/plugins/installed_plugins.json`，缺失 `caveman` / `compound-engineering` / `superpowers` 时一次性提示安装链接。Sentinel 文件 `~/.claude/.orch-plugin-hints-shown`。**永不阻断。**
 
-### 2. AGENTS.md Bootstrap
+### 2. AGENTS.md Bootstrap（项目级）
 扫描项目根 `AGENTS.md` / `CLAUDE.md`：
 
 | 情况 | 动作 |
@@ -286,6 +294,23 @@ Codex 失败 / 集成被拒 / learn-rule 触发 → `.error-log.jsonl` 5 类：d
 | 两者都有 | CLAUDE.md 是指针 → OK 静默；否则 WARN 建议合并 |
 
 **官方文档支持**（[code.claude.com/docs/en/memory.md](https://code.claude.com/docs/en/memory.md)）：Claude Code 自动展开 CLAUDE.md 中的 `@filename` 导入。
+
+### 3. 全局 CLAUDE.md §5.2 Auto-Seed + 版本感知 🔥 v2026-04
+
+检测**全局** `~/.claude/CLAUDE.md` 的 §5.2 状态（非项目 CLAUDE.md）：
+
+| 情况 | 动作 |
+|------|------|
+| CLAUDE.md 无 §5.2 引用此 skill | 提示"手动调用推断，是否 add §5.2？(y/n/later)" |
+| §5.2 无版本标记 `<!-- orch-skill-version: N -->` | 提示"你的 §5.2 早于版本化或手写，是否替换为 v${当前}?" |
+| §5.2 版本 < 当前 shipped | 提示"v${你的} → v${当前}, 变更摘要: ..., 是否更新?" |
+| §5.2 版本 = 当前 | 静默（up-to-date）|
+
+**Surgical Replacement 算法：** 用 awk 提取 "前半部分 + 新 §5.2 block + 后半部分"，preserve CLAUDE.md 其他内容完好；每次更新前自动建 `CLAUDE.md.bak-YYYYMMDD-HHMMSS` 时间戳备份。
+
+**当前 ship 版本：v1。** 升级 §5.2 内容时（新 trigger / 规则 / 结构变），同 commit 里 bump 版本号 + 更新 `CLAUDE.md.template`。
+
+Sentinel: `~/.claude/.orch-claude-md-seeded`。重置：`rm` 这个文件即可重新走一轮检测。
 
 ---
 
@@ -338,6 +363,9 @@ Codex 失败 / 集成被拒 / learn-rule 触发 → `.error-log.jsonl` 5 类：d
 | v0 (`bb10408`, 重构前) | 单体 SKILL.md 902 行 | 72.0 |
 | v1 (`f01002b`, thin-router) | SKILL.md 瘦到 81 行 + 3 新 references + CLAUDE.md.template | **78.6** |
 | v2 (`def4a9e`, Layer 0) | 加入 `/co:score` 自动打分机制 | **80.0** |
+| v3 (`f899c1c`, README 重写) | README 全量同步 thin-router 架构 + Layer 0 trigger 扩展到 README | **81.2** |
+| v4 (`a8090ac`, §5.2 auto-seed) | 全局 CLAUDE.md §5.2 自动播种（手动调用检测）| **82.4** |
+| v5 (`c2b8283`, §5.2 版本化) | §5.2 版本感知 + surgical replacement + 时间戳备份 | **83.2** |
 
 查看实时分数：`cat .skill-scores.jsonl`。
 

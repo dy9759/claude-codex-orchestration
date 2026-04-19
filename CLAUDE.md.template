@@ -18,7 +18,7 @@ Drop-in minimal global instructions for `~/.claude/CLAUDE.md`. Works on any mach
 
 Ask the user: `"是否需要触发一次全量代码审核？"` before every `git push`.
 
-## Preferred skill
+### 5.2 Prefer `claude-codex-orchestration` Skill <!-- orch-skill-version: 1 -->
 
 Invoke the `claude-codex-orchestration` skill whenever the task matches its triggers:
 

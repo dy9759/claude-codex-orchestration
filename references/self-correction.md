@@ -46,6 +46,49 @@ Regressions: <if any, with justification>
 
 **Locked evaluator (same rule as Layer 1):** the rubric weights and dimensions are immutable. Do not adjust them to make a change look better. If a weak score feels unfair, argue in the commit message, not by editing the rubric here.
 
+### Auto-README Sync Check (mandatory step of Layer 0)
+
+Every Layer 0 run, **before** computing the score, run this README coherence check:
+
+```bash
+readme_sync_check() {
+  local changed_files
+  changed_files=$(git diff --cached --name-only | grep -E '^(SKILL\.md|references/.*\.md|CLAUDE\.md\.template)$')
+
+  [ -z "$changed_files" ] && return 0  # no skill file changes, skip
+
+  local stale=()
+  for f in $changed_files; do
+    # For each changed skill file, find its name/key concepts in README
+    local basename=$(basename "$f" .md)
+    # If README references this file OR a section name from it that no longer matches → stale
+    if grep -q "$basename" README.md 2>/dev/null; then
+      # README references this file; verify descriptions still match new content
+      # (CC does this semantically, not regex)
+      stale+=("$f referenced in README — verify description still accurate")
+    fi
+  done
+
+  if [ ${#stale[@]} -gt 0 ]; then
+    echo "[README-sync] README.md references the following modified files:"
+    printf '  - %s\n' "${stale[@]}"
+    echo "Update README.md in this same commit OR explain in commit message why README is still accurate."
+  fi
+}
+```
+
+**Rule:** after any skill file edit, CC must:
+1. Run `readme_sync_check`
+2. For each flagged file, semantically compare README's description to the new content
+3. If README is now stale → update README in **the same commit** (preferred), or in an immediate follow-up
+4. If README is still accurate despite the change → note that in the commit message ("README unchanged: only internal <X> was modified, public description holds")
+
+**Why same commit, not follow-up?** README drifting behind skill content is the #1 way users lose trust in docs. Keeping them lockstep in one commit eliminates "half-updated" intermediate states visible on GitHub.
+
+**Score dimension tie-in:** a stale README detected but not updated → flag as Documentation Quality regression in the score. Forces either update-or-justify.
+
+**Compare to Layer 0's main score:** the sync check runs first (fact-gathering); the score then reflects the actual state (including any README updates that just happened).
+
 **Compare to Layer 1:** Layer 1 scores *session execution quality* (how well the orchestration worked). Layer 0 scores *skill quality* (how good the skill spec itself is). Two different axes, two different log files.
 
 ---
