@@ -11,6 +11,11 @@
 .decisions-pending
 .decisions-approved
 
+# Pending escalation queue (not yet uploaded to skill repo) — local-only retry state
+.issue-candidates.jsonl
+
+# Note: .issue-log.jsonl is TRACKED (evolution record, like .skill-scores.jsonl)
+
 # OS / editor cruft
 .DS_Store
 *.swp

@@ -200,6 +200,12 @@ Either path through the consolidated prompt: **before any `git push`**, ask user
 
 **Rule:** every user-facing question in this skill MUST include a recommendation. Never present a choice without indicating the preferred path.
 
+**Exception — background channels do NOT go through this standard:**
+- **Layer 2.5 External Escalation** (auto-reporting to skill repo) — runs silently, doesn't ask user for the upload decision; user can opt-out via sentinel.
+- **Auto-sync mechanisms** (session-start Part 3/4 up-to-date path, Layer 0 auto-README when no changes detected).
+
+These are NOT "choices for user" — they are autonomous mechanisms. Mixing them into user's input flow would violate the human-in-loop minimization principle.
+
 ### Required elements
 
 1. **Options** — each with a one-line tradeoff

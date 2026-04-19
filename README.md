@@ -241,6 +241,33 @@ Phase 0 理解 → Execution Plan 格式化 → 分派（边界清晰 → Codex�
 #### Layer 2 — 错误自动捕获
 Codex 失败 / 集成被拒 / learn-rule 触发 → `.error-log.jsonl` 5 类：dispatch / conflict / integration / scope-creep / token。
 
+#### Layer 2.5 — External Escalation 🔥 v2026-04
+**只上报结构性信号，不上报单次噪音。** 本地捕获 → 阈值聚合 → 自动上报 skill repo（`dy9759/claude-codex-orchestration`，**非**宿主项目）。
+
+**4 类触发条件：**
+
+| 类别 | 触发 | Fingerprint |
+|------|------|------------|
+| Recurrent root cause | 同 `root_cause` ≥ 2 次 / 7 会话 | `darwin:<category>:<root_cause>` |
+| Codex quality hard-stop | 滚动 20 次成功率 < 40% 或连续 ≥ 3 失败 | `quality:hard-stop:<category>` |
+| Darwin regression | `/co:promote` 添加的规则下次同维度未改善 | `darwin:regression:<dim>` |
+| Structural flaw | 同 `weak_point` 持续 ≥ 5 会话 | `structural:<weak_point>` |
+
+**Dedup：** 按 fingerprint 查已有 open issue → 存在则 comment 追加，不存在则 `gh issue create`。
+
+**Label-free 标题前缀：** `[Darwin]` / `[CE]` / `[Quality]` / `[Structural]`（label 作为可选增强，不依赖）。
+
+**Fallback 队列：** `gh` 不可用时写 `.issue-candidates.jsonl`（本地），下次 Session Start Part 5 自动 flush。成功上报后移入 git-tracked `.issue-log.jsonl`。
+
+**本地-only，永不上报：**
+- 单次 dispatch/conflict/integration 失败
+- 宿主项目已知脏状态、flaky test、无关失败
+- `gh auth` 未配置
+
+**用户关心的边界：** 这条上报链路**不是**宿主项目的 `todo/non-blocking` issue。那些仍按 Next-Step Decision Flow 处理，进入宿主项目的 issue tracker。Layer 2.5 只进入 **skill 自己的 issue tracker**，作为社区反馈通道，让 skill 演化跨用户汇聚。
+
+**Opt-out：** `touch ~/.claude/.orch-escalation-disabled`（本地捕获继续，只停外部上报）。
+
 #### Layer 3 — 审查 + 晋升 `/co:review` + `/co:promote`
 每 5 会话找 2+ 次重复弱点 → Durability+Impact+Scope 打分 ≥ 6 → 晋升到 SKILL.md。Ratchet 规则 + 简洁性原则。
 
@@ -281,6 +308,8 @@ Codex 失败 / 集成被拒 / learn-rule 触发 → `.error-log.jsonl` 5 类：d
 | `.decisions-approved` | ❌ gitignored | Plan-cycle 预批决策（执行后清）|
 | `.decisions-pending` | ❌ gitignored | 执行中队列决策（末端消费后清）|
 | `.tasks/*.json` | 视情况 | 并行任务板（原子认领）|
+| `.issue-candidates.jsonl` | ❌ gitignored | Layer 2.5 待上报队列（`gh` 不可用时的 fallback）|
+| `.issue-log.jsonl` | ✅ 跟踪 | Layer 2.5 已上报 skill 仓库 issue 的历史（跨用户可见）|
 
 **重置：** `rm ~/.claude/skills/claude-codex-orchestration/.{eval-scores,error-log,codex-quality}.jsonl` 清除个人会话数据。
 

@@ -321,6 +321,7 @@ Rule:
 2. AGENTS.md Bootstrap → no sentinel; state-based idempotent
 3. Global CLAUDE.md §5.2 Auto-Seed → `~/.claude/.orch-claude-md-seeded`
 4. Skill Self-Update Check → `~/.claude/.orch-update-last-check` (+ preference files)
+5. Escalation Queue Flush → pending `.issue-candidates.jsonl` entries retried when `gh` available (see Part 5)
 
 ---
 
@@ -456,6 +457,43 @@ After a successful pull:
 
 ---
 
+## Part 5: Escalation Queue Flush (Layer 2.5 retry path)
+
+**Intent:** if a previous session captured a skill-level structural signal but `gh` wasn't authenticated at the time, the escalation was queued to `.issue-candidates.jsonl`. This step retries the queue now.
+
+**Preconditions checked:**
+- `gh auth status` returns OK
+- `~/.claude/.orch-escalation-disabled` does NOT exist
+
+**Flow:**
+```bash
+flush_escalation_queue() {
+  local skill_dir=~/.claude/skills/claude-codex-orchestration
+  local candidates=$skill_dir/.issue-candidates.jsonl
+  local log=$skill_dir/.issue-log.jsonl
+  local repo=dy9759/claude-codex-orchestration
+
+  [ -f ~/.claude/.orch-escalation-disabled ] && return 0
+  [ ! -s "$candidates" ] && return 0  # empty or missing
+  gh auth status >/dev/null 2>&1 || return 0  # gh not ready
+
+  # For each pending entry: dedup + upload, move to log on success, drop after 5 attempts
+  # (see Layer 2.5 dedup flow in self-correction.md)
+}
+
+flush_escalation_queue
+```
+
+**Safety:**
+- Read-only parse of JSONL (no in-place mutation until success confirmed)
+- Each entry's `attempts` counter prevents infinite retry loops
+- After 5 failed attempts, drop entry with warning to user (not silent)
+- Writes are append-only to `.issue-log.jsonl`; candidates removed in batch at end
+
+See `references/self-correction.md` §Layer 2.5 for fingerprint format, dedup logic, and issue body template.
+
+---
+
 ## Data File Lifecycle (informational)
 
 Per-user session state — auto-created on first use, `.gitignore`d, never committed.
@@ -468,6 +506,9 @@ Per-user session state — auto-created on first use, `.gitignore`d, never commi
 | `.decisions-approved` | Pre-flight Decision Batching | Mid-execution (skip re-asking) | Plan-cycle approvals, cleared at Plan completion |
 | `.decisions-pending` | Mid-execution queue | End-of-Plan Consolidated Review | Queued decisions for batch resolution |
 | `.tasks/*.json` | CC before parallel Codex dispatch | Both agents during execution; CC at integration audit | Atomic task claiming, owner field prevents double-writes |
+| `.issue-candidates.jsonl` | Layer 2.5 when `gh` unavailable | Part 5 flush retry on next session | Pending escalation queue (to skill repo, not project repo) |
+| `.issue-log.jsonl` | Layer 2.5 after successful escalation | Historical audit | Uploaded/linked skill-repo issues — **git-tracked** like `.skill-scores.jsonl` |
 
 **First session:** files don't exist yet. Quality filters silent no-op when empty.
 **Reset:** `rm ~/.claude/skills/claude-codex-orchestration/.{eval-scores,error-log,codex-quality}.jsonl`
+**Disable external escalation:** `touch ~/.claude/.orch-escalation-disabled` (local capture continues).
