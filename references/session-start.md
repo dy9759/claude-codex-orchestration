@@ -179,42 +179,111 @@ agents_bootstrap
 
 ---
 
-## Part 3: Global CLAUDE.md §5.2 Auto-Seed (manual-invocation detection)
+## Part 3: Global CLAUDE.md §5.2 Auto-Seed + Version-Aware Update
 
-**Intent:** If the user invoked the skill **manually** (their global `~/.claude/CLAUDE.md` doesn't reference this skill), offer to add §5.2 + basic invocation rules so subsequent sessions auto-trigger on matching tasks.
+**Intent:** Two responsibilities in one check:
+1. If user invoked skill **manually** (no §5.2 in global CLAUDE.md) → offer to add
+2. If §5.2 exists but is **outdated** (older version than what skill currently ships) → offer to update surgically
 
-**Detection heuristic:** CC cannot see the invocation path directly, but it can check whether `~/.claude/CLAUDE.md` already references the skill. No reference = manual invocation inferred.
+### Version Constant (bump when §5.2 content changes materially)
+
+```bash
+CURRENT_CLAUDE_MD_SECTION_VERSION=1
+```
+
+**Bump rule:** Increment this whenever the §5.2 block below gets a new trigger, a changed rule, or a structural edit. Do NOT bump for cosmetic changes. Bump goes in the same commit as the block change.
+
+**Version history:**
+- `v1` (current) — 8 triggers incl. UI style, knowledge compounding, /co:think, /co:plan-review; "invoke the skill to check when in doubt" rule
+
+### Detection + Action Flow
 
 ```bash
 seed_global_claude_md() {
   local claude_md=~/.claude/CLAUDE.md
   local sentinel=~/.claude/.orch-claude-md-seeded
+  local current_version=1  # see Version Constant above
 
-  # One-shot — skip if already handled for this user
-  [ -f "$sentinel" ] && return 0
-
-  # If CLAUDE.md already mentions the skill, it was invoked via CLAUDE.md; mark and exit
-  if [ -f "$claude_md" ] && grep -q "claude-codex-orchestration" "$claude_md" 2>/dev/null; then
-    touch "$sentinel"
+  # Case A: CLAUDE.md missing entirely or doesn't mention skill → offer to add
+  if [ ! -f "$claude_md" ] || ! grep -q "claude-codex-orchestration" "$claude_md" 2>/dev/null; then
+    [ -f "$sentinel" ] && return 0  # user previously declined
+    echo "[Orchestration] No §5.2 in ~/.claude/CLAUDE.md — manual invocation inferred."
+    echo "  Add §5.2 'Prefer claude-codex-orchestration Skill' to ~/.claude/CLAUDE.md?"
+    echo "  Future sessions will auto-invoke on matching tasks. Reply: y / n / later."
+    # y → append §5.2 BLOCK below + touch sentinel
+    # n → touch sentinel (never re-ask)
+    # later → no sentinel (re-prompt next session)
     return 0
   fi
 
-  # Manual-invocation path: CLAUDE.md doesn't know about this skill
-  echo "[Orchestration] Detected manual invocation (~/.claude/CLAUDE.md has no reference to this skill)."
-  echo "  Add §5.2 'Prefer claude-codex-orchestration Skill' to ~/.claude/CLAUDE.md?"
-  echo "  Future sessions will auto-invoke on matching tasks. Reply: y / n / later."
-  # CC reads user reply; if y, append the block below and touch sentinel.
-  # If n, touch sentinel (don't ask again). If later, don't touch sentinel (re-prompt next session).
+  # Case B: §5.2 present — check version
+  local found_version
+  found_version=$(grep -oE 'orch-skill-version:[[:space:]]*[0-9]+' "$claude_md" | head -1 | grep -oE '[0-9]+')
+
+  if [ -z "$found_version" ]; then
+    # §5.2 exists but no version marker → ancient or hand-written
+    echo "[Orchestration] §5.2 in ~/.claude/CLAUDE.md has no version marker."
+    echo "  Current skill ships v${current_version}. Your version predates versioning or is hand-written."
+    echo "  Replace §5.2 block with current v${current_version}? (other CLAUDE.md content preserved)"
+    echo "  Reply: y / n / later"
+    return 0
+  fi
+
+  if [ "$found_version" -lt "$current_version" ]; then
+    echo "[Orchestration] §5.2 in ~/.claude/CLAUDE.md is v${found_version}; current is v${current_version}."
+    echo "  Changes since v${found_version}: <diff summary from Version History above>"
+    echo "  Update §5.2 block? (other CLAUDE.md content preserved) Reply: y / n / later"
+    return 0
+  fi
+
+  # Up-to-date — silent
+  return 0
 }
 
 seed_global_claude_md
 ```
 
-**Block to append when user answers `y`** (append to `~/.claude/CLAUDE.md`, do NOT overwrite):
+### Surgical Replacement Algorithm (when user says `y` to update)
+
+To replace ONLY the §5.2 block without touching the rest of CLAUDE.md:
+
+```bash
+update_section_52() {
+  local claude_md=~/.claude/CLAUDE.md
+  local tmp=$(mktemp)
+
+  # 1. Backup
+  cp "$claude_md" "${claude_md}.bak-$(date +%Y%m%d-%H%M%S)"
+
+  # 2. Extract everything BEFORE §5.2 heading
+  awk '/^### 5\.2 Prefer/{exit} {print}' "$claude_md" > "$tmp"
+
+  # 3. Append the current canonical §5.2 BLOCK (see below)
+  cat >> "$tmp" <<'BLOCK'
+  <current §5.2 block content, with version marker>
+BLOCK
+
+  # 4. Append everything AFTER the old §5.2 block (next ### heading onward)
+  awk '
+    /^### 5\.2 Prefer/{skip=1; next}
+    skip && /^### /{skip=0}
+    !skip {print}
+  ' "$claude_md" >> "$tmp"
+
+  mv "$tmp" "$claude_md"
+  touch ~/.claude/.orch-claude-md-seeded
+}
+```
+
+**Safety:** timestamped backup before any write, so user can recover via `cp CLAUDE.md.bak-<ts> CLAUDE.md` if unhappy with the update.
+
+### §5.2 Block (canonical, current version)
+
+When user answers `y` to add or update, write this block (append for Case A, surgical-replace for Case B):
 
 ```markdown
 
-### 5.2 Prefer `claude-codex-orchestration` Skill
+### 5.2 Prefer `claude-codex-orchestration` Skill <!-- orch-skill-version: 1 -->
 
 **When a task matches the `claude-codex-orchestration` skill's triggers, invoke it first.**
 
@@ -234,12 +303,16 @@ Rule:
 - If in doubt whether a task qualifies, invoke the skill to check — cheap to load, expensive to skip.
 ```
 
-**Safety rules:**
-- **Append, never overwrite** — preserve existing CLAUDE.md content intact
-- **Ask before writing** — never silently modify user's global config
-- **Idempotent** — sentinel prevents re-prompting even if user answers `n`
-- **Portable** — same §5.2 section heading as distributed `CLAUDE.md.template`, so machines with the template already have it and sentinel path skips silently
-- **No conflict with AGENTS.md Write Redirect** — that rule applies to *project* CLAUDE.md; this touches *global* `~/.claude/CLAUDE.md` which is user's personal config, not project instructions
+**Key marker:** the HTML comment `<!-- orch-skill-version: N -->` on the heading line is how CC detects version. Keep it on the same line as `### 5.2 Prefer`.
+
+### Safety Rules Summary
+
+- **Append or surgical-replace only** — never overwrite full CLAUDE.md
+- **Ask before writing** — user's global config is sacred
+- **Timestamped backups** on every update (`CLAUDE.md.bak-YYYYMMDD-HHMMSS`)
+- **Idempotent** — up-to-date state is silent; only outdated triggers re-prompt
+- **Decline-respected** — `n` touches sentinel so user is never nagged
+- **No conflict with AGENTS.md Write Redirect** — that's project CLAUDE.md; this is global `~/.claude/CLAUDE.md` (user personal config)
 
 **Reset:** `rm ~/.claude/.orch-claude-md-seeded` to re-prompt on next session (useful after manual CLAUDE.md edit).
 
