@@ -618,7 +618,7 @@ else:
 合并三股数据流为**单次 prompt**：
 
 ```
-## Plan 完成，测试全绿。Push 前统一 review：
+### Plan 完成，测试全绿。Push 前统一 review：
 
 A. 执行中队列决策（3 条）：
    A1. Task T5 — Codex review 3 条 medium 发现. 现在修 / 建 issue / 忽略?
@@ -766,7 +766,7 @@ Tone: 内联压缩 full
 ## 集成阶段输出
 
 ```
-## Integration
+### Integration
 Modified: [文件列表]
 Overlaps: [none / 冲突列表]
 Regressions: [none / 描述]

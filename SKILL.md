@@ -137,7 +137,7 @@ agents_bootstrap() {
       cat > AGENTS.md <<'TEMPLATE'
 # Agents
 
-## Non-Negotiable Rules
+### Non-Negotiable Rules
 
 - Prefer clarity over cleverness.
 - Keep files under 500 lines when possible.
@@ -467,7 +467,7 @@ MILESTONE_MENU=<any Phase-0-identified follow-on work that wasn't in this Plan>
 
 Present as ONE prompt:
 ```
-## Plan done. All tests green. Pre-push consolidated review:
+### Plan done. All tests green. Pre-push consolidated review:
 
 A. Queued decisions from execution (3):
    A1. Task T5 — Codex review: 3 medium findings in login.tsx. Fix now / file issues / ignore?

@@ -99,7 +99,7 @@ When the user says **"make it look like [URL]"** or **"extract the style from th
 ### Extraction Output Template
 
 ```markdown
-## Extracted Design Style — [source URL]
+### Extracted Design Style — [source URL]
 
 ### Color Palette
 - Primary: `#XXXXXX` (used for CTA buttons, links)
