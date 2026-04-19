@@ -1,0 +1,41 @@
+# CLAUDE.md
+
+Drop-in minimal global instructions for `~/.claude/CLAUDE.md`. Works on any machine, independent of project specifics. All deeper rules live in the `claude-codex-orchestration` skill and project-level `AGENTS.md`.
+
+## Always-apply rules
+
+1. **State assumptions** explicitly. Ask when uncertain. Surface tradeoffs.
+2. **Simplicity first** — minimum code, no speculative features, no single-use abstractions.
+3. **Surgical changes** — only what the task needs. Match existing project style.
+4. **Verify goals** — every task has a concrete `verify:` step.
+
+## Hard limits (new files only)
+
+- ≤ 500 lines per new file. Split before exceeding.
+- ≤ complexity 20 (nesting). Extract helpers if deeper.
+
+## Pre-push
+
+Ask the user: `"是否需要触发一次全量代码审核？"` before every `git push`.
+
+## Preferred skill
+
+Invoke the `claude-codex-orchestration` skill whenever the task matches its triggers:
+
+- Dual-agent work (Claude Code + Codex + optional Gemini)
+- Parallel implementation of bounded modules
+- Cross-harness setup (Cursor / Codex / OpenCode)
+- Pre-task thinking via `/co:think`
+- Strategic plan review via `/co:plan-review`
+- Engineering principles enforcement (Hyrum, Beyoncé, Chesterton, trunk-based, shift-left, feature flags, deprecation, maintainability harness)
+- UI style standard (shadcn/radix-nova)
+- Knowledge compounding
+
+Do not re-invent its workflows ad hoc. Prefer its `/co:*` invocation prompts and subagent-dispatch patterns. If in doubt whether a task qualifies, invoke the skill — cheap to load, expensive to skip.
+
+---
+
+**That's it.** 20 lines. Everything else is delegated to:
+
+- `~/.claude/skills/claude-codex-orchestration/SKILL.md` (router, loads when skill invoked)
+- Project-level `AGENTS.md` (auto-created by skill's bootstrap on first run)
