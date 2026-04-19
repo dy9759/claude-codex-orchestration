@@ -179,6 +179,77 @@ agents_bootstrap
 
 ---
 
+## Part 3: Global CLAUDE.md §5.2 Auto-Seed (manual-invocation detection)
+
+**Intent:** If the user invoked the skill **manually** (their global `~/.claude/CLAUDE.md` doesn't reference this skill), offer to add §5.2 + basic invocation rules so subsequent sessions auto-trigger on matching tasks.
+
+**Detection heuristic:** CC cannot see the invocation path directly, but it can check whether `~/.claude/CLAUDE.md` already references the skill. No reference = manual invocation inferred.
+
+```bash
+seed_global_claude_md() {
+  local claude_md=~/.claude/CLAUDE.md
+  local sentinel=~/.claude/.orch-claude-md-seeded
+
+  # One-shot — skip if already handled for this user
+  [ -f "$sentinel" ] && return 0
+
+  # If CLAUDE.md already mentions the skill, it was invoked via CLAUDE.md; mark and exit
+  if [ -f "$claude_md" ] && grep -q "claude-codex-orchestration" "$claude_md" 2>/dev/null; then
+    touch "$sentinel"
+    return 0
+  fi
+
+  # Manual-invocation path: CLAUDE.md doesn't know about this skill
+  echo "[Orchestration] Detected manual invocation (~/.claude/CLAUDE.md has no reference to this skill)."
+  echo "  Add §5.2 'Prefer claude-codex-orchestration Skill' to ~/.claude/CLAUDE.md?"
+  echo "  Future sessions will auto-invoke on matching tasks. Reply: y / n / later."
+  # CC reads user reply; if y, append the block below and touch sentinel.
+  # If n, touch sentinel (don't ask again). If later, don't touch sentinel (re-prompt next session).
+}
+
+seed_global_claude_md
+```
+
+**Block to append when user answers `y`** (append to `~/.claude/CLAUDE.md`, do NOT overwrite):
+
+```markdown
+
+### 5.2 Prefer `claude-codex-orchestration` Skill
+
+**When a task matches the `claude-codex-orchestration` skill's triggers, invoke it first.**
+
+Triggers (non-exhaustive):
+- Dual-agent work (Claude Code + Codex + optional Gemini)
+- Parallel implementation of bounded modules
+- Cross-harness setup (Cursor / Codex / OpenCode)
+- Pre-task thinking via `/co:think`
+- Strategic plan review via `/co:plan-review`
+- Engineering principles enforcement (Hyrum, Beyoncé, Chesterton, trunk-based, shift-left, feature flags, deprecation, maintainability harness)
+- UI style standard (shadcn/radix-nova)
+- Knowledge compounding (`/co:compound`, `/co:sessions`)
+
+Rule:
+- If the current work plausibly matches any trigger above, invoke the `claude-codex-orchestration` skill **before** doing other work.
+- Do not re-invent its workflows ad hoc. Prefer its `/co:*` invocation prompts and subagent-dispatch patterns.
+- If in doubt whether a task qualifies, invoke the skill to check — cheap to load, expensive to skip.
+```
+
+**Safety rules:**
+- **Append, never overwrite** — preserve existing CLAUDE.md content intact
+- **Ask before writing** — never silently modify user's global config
+- **Idempotent** — sentinel prevents re-prompting even if user answers `n`
+- **Portable** — same §5.2 section heading as distributed `CLAUDE.md.template`, so machines with the template already have it and sentinel path skips silently
+- **No conflict with AGENTS.md Write Redirect** — that rule applies to *project* CLAUDE.md; this touches *global* `~/.claude/CLAUDE.md` which is user's personal config, not project instructions
+
+**Reset:** `rm ~/.claude/.orch-claude-md-seeded` to re-prompt on next session (useful after manual CLAUDE.md edit).
+
+**Order of one-shot checks at Session Start:**
+1. Plugin Detection → `~/.claude/.orch-plugin-hints-shown`
+2. AGENTS.md Bootstrap → no sentinel; state-based idempotent
+3. Global CLAUDE.md §5.2 Auto-Seed → `~/.claude/.orch-claude-md-seeded`
+
+---
+
 ## Data File Lifecycle (informational)
 
 Per-user session state — auto-created on first use, `.gitignore`d, never committed.

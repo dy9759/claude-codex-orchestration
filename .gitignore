@@ -5,6 +5,7 @@
 
 # Per-user sentinels
 .orch-plugin-hints-shown
+.orch-claude-md-seeded
 
 # Per-plan decision state (regenerated each Plan cycle)
 .decisions-pending
