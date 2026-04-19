@@ -196,6 +196,17 @@ Do not generate code that:
 - Leaves dead code after replacement
 - Uses misleading names
 
+### Frontend-specific Hard Red Lines (when UI work involved)
+
+- Introduces a second UI library alongside shadcn (MUI, Chakra, AntD, etc.)
+- Introduces a second icon library alongside lucide
+- Hardcodes hex colors in components when CSS variables exist
+- Bypasses `@/components/ui` to inline primitive styles
+- Overrides `radix-nova` theme variables without user confirmation
+- Uses arbitrary Tailwind values (`p-[13px]`) when the scale has a valid token
+
+See `ui-style-standard.md` for the full frontend default.
+
 ## 19. Output Requirements (Agent Deliverable)
 
 For every non-trivial code change, provide:

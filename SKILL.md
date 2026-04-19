@@ -29,6 +29,7 @@ Deep content lives in `references/` — load only when needed. CC reads this ind
 | Thinking & decision (`/co:think`, `/co:plan-review`) | `references/thinking-decision.md` | Complex/ambiguous task before Execution Plan |
 | Engineering principles (Hyrum, Beyoncé, Chesterton, etc.) | `references/engineering-principles.md` | Integration review + every Codex task gate |
 | Maintainability harness (file size, nesting, naming, hard red lines) | `references/maintainability-harness.md` | Every Codex dispatch; seed AGENTS.md with these rules |
+| UI style standard (shadcn + radix-nova default, webpage style extraction) | `references/ui-style-standard.md` | Any frontend work; "make it look like [URL]" requests |
 
 ---
 
@@ -169,10 +170,17 @@ agents_bootstrap() {
 3. Integrate once — single writer per file at any moment
 4. Verify: tests + lint + type check before push
 
+### UI Style (Frontend Default)
+
+- Default: shadcn/ui + `"style": "radix-nova"` + `baseColor: neutral` + `iconLibrary: lucide`
+- See `~/.claude/skills/claude-codex-orchestration/references/ui-style-standard.md` for full `components.json`, webpage style extraction workflow, and secondary style library
+- **Do not introduce a second UI library alongside shadcn.** No hardcoded hex colors in components — use CSS variables. Use Tailwind scale, not arbitrary `p-[13px]`.
+
 ### Referenced Docs
 
 - Skill: `~/.claude/skills/claude-codex-orchestration/SKILL.md`
 - Maintainability harness: `~/.claude/skills/claude-codex-orchestration/references/maintainability-harness.md`
+- UI style standard: `~/.claude/skills/claude-codex-orchestration/references/ui-style-standard.md`
 - Solved problems (if present): `docs/solutions/`
 TEMPLATE
       printf '%s\n' "$pointer" > CLAUDE.md
@@ -270,7 +278,7 @@ Show plan. Wait for confirm. Then execute. Optional: run `/co:plan-review` for C
 | Requires repo-wide context (architecture, cross-cutting refactor) | Any **backend/script** module with clear file/API boundaries |
 | Coordinates multiple subsystems | Independently verifiable (has its own tests or clear acceptance criteria) |
 | Touches migrations, CI/CD, release pipelines | Isolated bug fixes with known scope |
-| **Frontend work** — UI components, pages, interactions, styling, design systems | Parallel candidate implementations (compare and pick) |
+| **Frontend work** — UI components, pages, interactions, styling, design systems (default: shadcn/ui + radix-nova, see `references/ui-style-standard.md`) | Parallel candidate implementations (compare and pick) |
 | Integrates others' output | Current diff review (read-only) |
 | Makes final decisions on interfaces | — |
 

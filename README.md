@@ -36,6 +36,7 @@ Claude Code（Tech Lead）
 | 5. 安全与质量 | Smart Tool RAG、质量追踪（滚动 20 窗）、安全门、任务板原子认领 |
 | 6. 思考与决策 | `/co:think`（产品/技术双模式）、`/co:plan-review`（CEO 级 4 模式） |
 | 7. 工程原则 | Hyrum's Law、Beyoncé Rule、测试金字塔、Chesterton's Fence、Trunk-Based、Shift Left、Feature Flag、Deprecation |
+| 7.5. UI 样式规范 | shadcn/ui + `radix-nova` 默认；支持从任意网页提取设计 tokens 映射到 shadcn 覆盖层 |
 | 8. 自我纠错与知识复利 | 三层自我纠错（eval/capture/promote）、darwin 棘轮、`/co:compound` 知识沉淀 |
 
 ---
@@ -357,6 +358,7 @@ PREMISES:
 | 维度 | 规则 |
 |------|------|
 | **Common Rationalizations** | "太简单不用测"、"以后再重构"、"只是配置"、"Feature flag 太复杂" 等话术一律拒绝 |
+| **UI 样式** | shadcn/ui + `radix-nova` 为默认；网页设计提取能力（见 §7.5） |
 | **API 设计（Hyrum's Law）** | 有足够用户后，所有可观察行为都会被依赖。暴露即契约 |
 | **测试（Beyoncé Rule）** | 值得保留的行为必有测试。Bug 修复必先写复现测试 |
 | **测试金字塔** | 单元 80% / 集成 15% / E2E 5%。集成或 E2E 过重 → 违规 |
@@ -367,6 +369,52 @@ PREMISES:
 | **Shift Left** | 提交时跑 lint + type check + test，不等到部署 |
 | **Feature Flags** | 新功能 OFF → team → 5% → 25% → 50% → 100% → cleanup |
 | **Deprecation** | Advisory/Compulsory 区分，Strangler/Adapter/Feature-Flag 三种迁移策略，Churn Rule |
+
+## 7.5. UI 样式规范层（前端工作统一标准）
+
+**硬默认：** shadcn/ui + `"style": "radix-nova"` + `baseColor: neutral` + `iconLibrary: lucide`
+
+每个新前端项目的 `components.json` 起点：
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "radix-nova",
+  "baseColor": "neutral",
+  "iconLibrary": "lucide",
+  "aliases": { "components": "@/components", "ui": "@/components/ui", ... }
+}
+```
+
+**次级风格库（灵感源，非默认）：**
+| 来源 | 场景 |
+|------|------|
+| [VoltAgent/awesome-design-md](https://github.com/VoltAgent/awesome-design-md) | 需要品牌参考库 |
+| [pbakaus/impeccable](https://github.com/pbakaus/impeccable) | 需要"good taste"默认值 |
+| [bergside/typeui](https://github.com/bergside/typeui) | 排版密集型界面 |
+| [bergside/awesome-design-skills](https://github.com/bergside/awesome-design-skills) | 设计技能参考 |
+| [dy9759/brandmd0419](https://github.com/dy9759/brandmd0419) | 用户个人品牌 |
+| [dy9759/dembrandt0419](https://github.com/dy9759/dembrandt0419) | 用户个人主题 |
+
+**网页样式提取能力**（参考 [bergside/design-md-chrome](https://github.com/bergside/design-md-chrome)）：
+
+用户说"做成像 [URL] 那样"时自动触发：
+```
+1. WebFetch 页面
+2. 提取设计 tokens（颜色、字体、间距、圆角、阴影、动效）
+3. 生成 markdown 设计规范
+4. 映射到 shadcn 覆盖层：src/global.css CSS 变量 + tailwind.config 颜色扩展
+5. 询问用户确认后应用
+```
+
+**前端 Hard Red Lines：**
+- 不得在 shadcn 之外引入第二个 UI 库（MUI/Chakra/AntD）
+- 不得在 lucide 之外引入第二个图标库
+- 组件里禁止硬编码 hex 颜色（必须走 CSS 变量）
+- 禁止绕过 `@/components/ui` 内联 primitive 样式
+- 禁止未经用户确认改 `radix-nova` 主题变量
+- 禁止使用 Tailwind 任意值（`p-[13px]`）当 scale 有合法 token
+
+详见 `references/ui-style-standard.md`（234 行完整规范）。
 
 ---
 
