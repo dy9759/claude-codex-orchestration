@@ -1,6 +1,52 @@
 # Self-Correction System
 
-Three-layer mechanism: **evaluate → capture errors → promote learnings**.
+Four-layer mechanism: **score skill edits → evaluate sessions → capture errors → promote learnings**.
+
+---
+
+## Layer 0: Skill Modification Score (`/co:score`) — auto-fire after every skill edit
+
+**Trigger:** Any commit that modifies `SKILL.md`, `references/*.md`, `CLAUDE.md.template`, or the AGENTS.md template inside `references/session-start.md`.
+
+**Action:** After staging changes (before the commit message is finalized), compute the 8-dimension weighted score and append to `.skill-scores.jsonl` in repo root. Include the score in the commit message footer.
+
+**Rubric (immutable weights):**
+
+| Dimension | Weight | Criterion |
+|-----------|:------:|-----------|
+| Design Completeness | 20% | Does the skill cover everything needed for its stated scope? |
+| Documentation Quality | 15% | Can a new reader navigate and understand without prior context? |
+| Self-Containment | 15% | Works without external plugins or assumptions about host CLAUDE.md? |
+| Cross-Harness Coverage | 10% | Works on CC + Cursor + Codex + OpenCode? |
+| Executability | 15% | Can CC follow the rules without guessing? |
+| Validation Evidence | 10% | Has it been exercised in real sessions? Data files populated? |
+| Engineering Rigor | 10% | Locked evaluator, anti-inflation, ratchet rules, etc.? |
+| Usability | 5% | How fast can a user adopt it? |
+
+**Scoring each dimension:** 0–100 (integer). Use the Devil's Advocate technique from Layer 1 — argue for lower, argue for higher, then commit to a number.
+
+**Weighted total:** `Σ (weight × dim_score)` — round to one decimal.
+
+**Persist to `.skill-scores.jsonl`:**
+```json
+{"date":"YYYY-MM-DD","commit":"<short-sha>","score":N.N,"delta":+/-N.N,"dims":{"design":N,"docs":N,"self-contained":N,"cross-harness":N,"executable":N,"validation":N,"engineering":N,"usability":N},"changes":"<1-sentence summary>"}
+```
+
+The file is **git-tracked** (unlike per-user JSONL state) — it records the skill's evolution arc and is shared across all users.
+
+**Regression flag:** if any single dimension drops ≥3 vs the prior commit, CC must explain the tradeoff in the commit message footer. Example:
+> *Executability -4 (traded for +6 Self-Containment by removing caveman plugin dependency).*
+
+**Commit message footer template:**
+```
+Skill score: N.N/100 (Δ vs prior: +/-N.N)
+Top changes: <dim1> +N, <dim2> +N
+Regressions: <if any, with justification>
+```
+
+**Locked evaluator (same rule as Layer 1):** the rubric weights and dimensions are immutable. Do not adjust them to make a change look better. If a weak score feels unfair, argue in the commit message, not by editing the rubric here.
+
+**Compare to Layer 1:** Layer 1 scores *session execution quality* (how well the orchestration worked). Layer 0 scores *skill quality* (how good the skill spec itself is). Two different axes, two different log files.
 
 ---
 
