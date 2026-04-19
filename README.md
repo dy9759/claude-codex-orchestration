@@ -157,7 +157,17 @@ Claude Code 会：
 Phase 0 理解 → Execution Plan 格式化 → 分派（边界清晰 → Codex；前端/架构 → CC；UI 判断 → Gemini）。Codex 调用走 XML 结构化 prompt + thread 持久化 + 置信度门控 Co-Decision。详见 `references/workflow-core.md` + `references/codex-protocol.md`。
 
 ### 4. 决策集中协议 🔥 v2026-04
-所有用户决策**前置到 Plan 确认** + **末端一次性汇总**。执行中只有 5 类硬阻塞（安全 BLOCKED / 数据丢失 / 越 scope / CRITICAL 颠覆 / 真阻塞）才打断。其他中途决策写入 `.decisions-pending` 队列，应用安全默认，末端汇总一轮回完。详见 `references/decision-protocol.md`。
+所有用户决策**前置到 Plan 确认** + **末端一次性汇总**。执行中只有 5 类硬阻塞（安全 BLOCKED / 数据丢失 / 越 scope / CRITICAL 颠覆 / 真阻塞）才打断。其他中途决策写入 `.decisions-pending` 队列，应用安全默认，末端汇总一轮回完。
+
+**问答格式标准**（所有交互强制）：
+- 每个问题 **必带 recommendation + 置信度**
+- 涉及代码/架构 → 追加 Codex 建议
+- 涉及 UI/设计 → 追加 Gemini 建议
+- 3 agent 一致 → 标"all agents agree"；分歧 → 用户决定
+- 简单 y/n 可用紧凑格式（省 Codex/Gemini 视图）
+- 禁止"A/B/C?" 单行 → 必须含 options + tradeoff + recommendation
+
+详见 `references/decision-protocol.md` §Question Format Standard。
 
 ### 5. 安全与质量
 - **Smart Tool RAG** — BM25 + 语义二阶段技能检索

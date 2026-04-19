@@ -193,3 +193,131 @@ Pick the next incomplete item. Announce: "Next: [task]. Verify: [command]."
 See "End-of-Plan Consolidated Review" above — merges queued decisions, open issues, milestone menu into one prompt. Do NOT create separate sub-dialogs.
 
 Either path through the consolidated prompt: **before any `git push`**, ask user "是否需要触发一次全量代码审核？" first.
+
+---
+
+## Question Format Standard (applies to ALL user interactions)
+
+**Rule:** every user-facing question in this skill MUST include a recommendation. Never present a choice without indicating the preferred path.
+
+### Required elements
+
+1. **Options** — each with a one-line tradeoff
+2. **Recommendation** — which option CC picks, with confidence (high/medium/low)
+3. **Agent views** — CC always; Codex on code/architecture questions; Gemini on UI/design questions
+4. **Unanimous consensus call-out** — if CC + Codex + Gemini all agree, say "all agents agree on X"; if divergent, user decides
+
+### Full format (for high-stakes questions)
+
+```
+Q: <the question>
+
+Options:
+  A. <option> — <when to pick>
+  B. <option> — <when to pick>
+  C. <option> — <when to pick>
+
+Recommendation: B (confidence: high/medium/low)
+  CC: <one-sentence reasoning from local context>
+  Codex: <independent take> — or "not consulted (routine)" or "declined (rate-limited)"
+  Gemini: <design/UI take> — or "N/A (not a UI question)" or "unavailable"
+
+Reply: A / B / C
+```
+
+### Compact format (for routine y/n)
+
+When the question is low-stakes and CC has full context, skip agent views:
+
+```
+Q: <yes/no question>
+Recommendation: y (CC: <one-sentence reason>)
+Reply: y / n / later
+```
+
+### When to actively query other agents
+
+Querying Codex/Gemini has round-trip cost. Rule:
+
+| Question type | Query Codex | Query Gemini |
+|---------------|:-----------:|:-----------:|
+| Pre-flight batch (Plan confirmation) | if ≥ 1 code/arch decision | if ≥ 1 UI/design decision |
+| End-of-Plan review — Codex review findings | already ran (results shown) | no |
+| End-of-Plan review — Gemini suggestions | no | already ran (results shown) |
+| Blocking security/data interruption | no (low-confidence anyway) | no |
+| Chesterton's Fence (code unclear) | yes (impact analysis) | no |
+| UI theme/variant selection | no | yes |
+| Simple bootstrap y/n (CLAUDE.md, plugin, etc.) | no | no |
+| Mode selection (`/co:plan-review` EXPAND/HOLD/...) | on scope expansion risk | no |
+| `/co:compound` Full vs Lightweight | no | no (CC has full context) |
+| Codex Co-Decision escalation | already consulted | sometimes (on UI edge cases) |
+
+### Examples
+
+**Pre-flight decision with all 3 agents:**
+```
+Q: Task T5 changes radix-nova primary color to brand-accent.
+
+Options:
+  y. Approve — ship the brand-accent change
+  n. Reject — keep default radix-nova
+  ask-later. Queue to end-of-plan for more context
+
+Recommendation: y (confidence: medium)
+  CC: change is scoped, no downstream components hardcode primary; isolated risk.
+  Codex: not consulted (pure design choice, no code impact).
+  Gemini: brand-accent has sufficient contrast against neutral-50/900; passes WCAG AA.
+
+Reply: y / n / ask-later
+```
+
+**Chesterton's Fence with CC + Codex:**
+```
+Q: Delete legacy-auth.ts — purpose unclear.
+
+Options:
+  k. Keep (Fence principle, safest)
+  d. Delete (assume unused)
+  i. Investigate callers first
+
+Recommendation: i (confidence: medium)
+  CC: grep finds 3 test-file imports but none in src/; ambiguous.
+  Codex: in cold-read of repo, found 1 runtime import via dynamic require in plugins/; deletion would break dynamic loading.
+  Gemini: N/A.
+
+Reply: k / d / i
+```
+
+**Compact bootstrap y/n:**
+```
+Q: Add §5.2 'Prefer claude-codex-orchestration' to ~/.claude/CLAUDE.md?
+Recommendation: y (CC: no §5.2 present, manual invocation inferred; adding makes future sessions auto-trigger)
+Reply: y / n / later
+```
+
+**Blocking security interrupt (compact, no query):**
+```
+BLOCKING: Task plan touches .env — dispatch blocked. Cancel task, or assign to CC (not Codex)?
+Recommendation: assign-to-CC (CC: Codex cannot handle secrets per Dispatch Security Gate; CC can with user awareness)
+Reply: cancel / cc
+```
+
+### Anti-pattern (what NOT to do)
+
+❌ Just listing options:
+```
+A / B / C ?
+```
+
+❌ Recommendation buried in prose:
+```
+"There are several ways. You could do A which is fine, or B, or maybe C..."
+```
+
+❌ Silently favoring one option:
+```
+"I'll do A unless you object."
+(Correct: "Recommendation: A. Reply y / n / override.")
+```
+
+✅ Always: explicit options + explicit recommendation + explicit agent views (when relevant).
