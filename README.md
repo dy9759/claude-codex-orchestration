@@ -7,18 +7,27 @@
 ## 核心思路
 
 ```
-Claude Code（Tech Lead）
+Claude Code（Tech Lead + 主执行者）
     │
     ├─ 架构设计、跨模块决策、仓库探索
     ├─ 前端工作（UI、页面、交互、样式、设计系统）
     ├─ 迁移、CI/CD、发布协调
     ├─ 最终集成、回归测试
     │
-    └─▶ Codex（Parallel Implementer）
-            ├─ 边界清晰的后端模块 / 脚本
-            ├─ 独立可验证的 feature
-            ├─ 并行方案试解
-            └─ 当前 diff review（只读）
+    ├─▶ Codex（并行实现者）
+    │       ├─ 边界清晰的后端模块 / 脚本
+    │       ├─ 独立可验证的 feature
+    │       ├─ 并行方案试解
+    │       └─ 当前 diff review（只读）
+    │
+    └─▶ Gemini（前端/UI 专项咨询，可选）
+            ├─ 大型 UI 改版方案发散
+            ├─ 2–3 个视觉/交互方向备选
+            ├─ CSS 架构 / a11y / 响应式审查
+            ├─ 多文件 UI 一致性扫描
+            └─ "不丑但不够好"第二意见
+            * via mcp__gemini-cli__*，不是 API key
+            * CC 永远负责实现和浏览器验证；Gemini 只咨询不执行
 ```
 
 **铁律：** 任何时候不允许两个 Agent 同时写同一个文件。
@@ -38,6 +47,7 @@ Claude Code（Tech Lead）
 | 7. 工程原则 | Hyrum's Law、Beyoncé Rule、测试金字塔、Chesterton's Fence、Trunk-Based、Shift Left、Feature Flag、Deprecation |
 | 7.5. UI 样式规范 | shadcn/ui + `radix-nova` 默认；支持从任意网页提取设计 tokens 映射到 shadcn 覆盖层 |
 | 7.6. 下一步决策流 | 每个任务后先跑测试；阻塞性失败立即修，非阻塞建 gh issue 继续；计划完成后统一处理未决 issue |
+| 7.7. Gemini 前端专项咨询 | 大型 UI 改版 / 方案发散 / CSS 架构审查 / a11y 审查时调用 Gemini（via gemini-cli MCP）；CC 始终实现并浏览器验证；Gemini 不可用 → CC 不阻塞继续 |
 | 8. 自我纠错与知识复利 | 三层自我纠错（eval/capture/promote）、darwin 棘轮、`/co:compound` 知识沉淀 |
 
 ---
@@ -480,6 +490,63 @@ gh issue list --state open --label todo --json number,title,labels --limit 20
 - Issue 留给下次会话
 
 **两条路径都强制：** push 前触发 §5.3 code review prompt（"是否需要触发一次全量代码审核？"）
+
+## 7.7. Gemini 前端专项咨询层
+
+**关系：** CC 主控 → Gemini 专项咨询 → CC 兜底。Gemini 给建议，CC 实现+验证。
+
+**事实优先级：** 浏览器真实运行 > 本地代码上下文 > Gemini 建议。
+
+### 何时调用 Gemini
+
+| 调用 Gemini | 不调用 Gemini |
+|------------|--------------|
+| 大型 UI 改版 / 新页面 / 新模块 | 小样式修复 / 文案调整 / 明确 bugfix |
+| 需要 2–3 个视觉/交互方向 | 快速试错运行时问题 |
+| 组件结构 / 信息架构不确定 | 浏览器调试（console / network / DOM） |
+| 多文件 UI/CSS 一致性审查 | 紧急阻塞任务 |
+| a11y / 响应式 / 语义 HTML 审查 | CC < 2 分钟能完成的改动 |
+| "不丑但不够好"第二意见 | — |
+
+### 调用方式
+
+通过 `mcp__gemini-cli__*` MCP 工具（**不走 API key**）。Prompt 用自然语言（不是 XML，Gemini 是协作者不是 Codex 那种操作员）：
+
+```
+ask gemini to propose 3 UI variants for [component], prioritize [criterion]
+ask gemini to audit CSS architecture for responsive inconsistencies in src/pages/
+ask gemini to review the current diff for frontend issues (naming, a11y, perf)
+```
+
+要求 Gemini 返回结构化输出：`recommendation / alternatives / risks / implementation notes`。
+
+### Gemini vs Codex Co-Decision 路由
+
+| 问题性质 | 路由到 |
+|---------|-------|
+| 代码架构、bug 分类、风险分诊 | Codex Co-Decision |
+| 前端设计方向、UI 美学、a11y | Gemini 咨询 |
+| 两者都适用 | 挑更接近失败模式的那个（代码 → Codex，视觉 → Gemini），永不同时问 |
+
+### 失败 fallback
+
+Gemini MCP 不可用（超时/限流/出错）→ CC 继续执行，**绝不阻塞**。在 `.error-log.jsonl` 记 `category: gemini-unavailable`，后续由自我纠错循环识别模式。
+
+### Hook 配置（一次性）
+
+所有 Gemini 调用由 CC 侧 hook 记录。在 `~/.claude/settings.json` 加：
+```json
+{
+  "hooks": {
+    "PostToolUse": [{
+      "matcher": "mcp__gemini-cli__.*",
+      "hooks": [{"type": "command", "command": "~/.claude/hooks/after-gemini.sh", "async": true, "timeout": 120}]
+    }]
+  }
+}
+```
+
+详见 `references/gemini-integration.md`（260 行完整规范）。
 
 ---
 

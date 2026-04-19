@@ -1,17 +1,19 @@
 ---
 name: claude-codex-orchestration
-description: Use when coordinating Claude Code + Codex as dual agents, delegating parallel implementation of bounded modules to Codex, splitting work by boundary-clarity not domain, controlling token consumption, cross-harness setup (Cursor/Codex/OpenCode), pre-task thinking (/co:think), strategic plan review (/co:plan-review), engineering principles enforcement (Hyrum, Beyoncé, Chesterton, trunk-based, shift-left, feature-flags, deprecation, maintainability harness), and knowledge compounding. Self-contained; optional plugins auto-detected.
+description: Use when coordinating Claude Code + Codex as dual agents with Gemini as frontend/UI specialist consultant (via gemini-cli MCP), delegating parallel implementation of bounded modules to Codex, splitting work by boundary-clarity not domain, controlling token consumption, cross-harness setup (Cursor/Codex/OpenCode), pre-task thinking (/co:think), strategic plan review (/co:plan-review), engineering principles enforcement (Hyrum, Beyoncé, Chesterton, trunk-based, shift-left, feature-flags, deprecation, maintainability harness), UI style standard (shadcn/radix-nova), and knowledge compounding. Self-contained; optional plugins and Gemini MCP auto-detected.
 ---
 
 # Claude Code + Codex Orchestration
 
 ## Overview
 
-Claude Code = **Tech Lead / Orchestrator**. Codex = **Parallel Implementer**.
+Claude Code = **Tech Lead / Orchestrator + primary executor**.
+Codex = **Parallel Implementer** for bounded backend/script modules.
+Gemini = **Frontend/UI specialist consultant** (via `gemini-cli` MCP, when available).
 
-**Core principle:** Plan → split cleanly → parallel execute → integrate once. Never two agents on same file simultaneously.
+**Core principle:** Plan → split cleanly → parallel execute → integrate once. Never two agents on same file simultaneously. Gemini is a consultant, not a co-executor — CC always implements and verifies.
 
-**Announce at start:** "Using claude-codex-orchestration — acting as Tech Lead. Dispatching to Codex where appropriate."
+**Announce at start:** "Using claude-codex-orchestration — acting as Tech Lead. Dispatching to Codex for bounded modules; consulting Gemini on frontend/UI as needed."
 
 ---
 
@@ -30,6 +32,7 @@ Deep content lives in `references/` — load only when needed. CC reads this ind
 | Engineering principles (Hyrum, Beyoncé, Chesterton, etc.) | `references/engineering-principles.md` | Integration review + every Codex task gate |
 | Maintainability harness (file size, nesting, naming, hard red lines) | `references/maintainability-harness.md` | Every Codex dispatch; seed AGENTS.md with these rules |
 | UI style standard (shadcn + radix-nova default, webpage style extraction) | `references/ui-style-standard.md` | Any frontend work; "make it look like [URL]" requests |
+| Gemini integration (frontend/UI specialist consultant) | `references/gemini-integration.md` | Large UI revamps, 2–3 visual variants needed, CSS/a11y/structure review, "not ugly but not great" second opinion |
 
 ---
 
@@ -151,8 +154,9 @@ agents_bootstrap() {
 
 ### Role Definitions
 
-- **Claude Code** — Tech Lead / Orchestrator. Owns architecture, cross-module decisions, integration, frontend work (UI components, pages, interactions, styling), anything needing repo-wide context (migrations, CI/CD, release coordination).
+- **Claude Code** — Tech Lead / Orchestrator + primary executor. Owns architecture, cross-module decisions, integration, frontend work (UI components, pages, interactions, styling), anything needing repo-wide context (migrations, CI/CD, release coordination).
 - **Codex** — Parallel Implementer. Owns bounded backend/script modules with clear boundaries and independent verifiability (isolated features, self-contained scripts, parallel solution attempts, diff review).
+- **Gemini** — Frontend/UI specialist consultant (via `gemini-cli` MCP, optional). Advises on design direction, CSS audits, a11y, multi-file consistency. Never executes — CC always implements and verifies.
 
 ### Blocked File Patterns (Codex never writes these)
 
@@ -180,6 +184,12 @@ After each task completes, run priority cascade:
 3. **If tests pass** → next task from Execution Plan
 4. **When Plan complete** → `gh issue list --state open --label todo` → triage loop before push
 
+### Frontend/UI consultation
+
+- Small UI change → CC does it directly, no Gemini
+- Large revamp / 2–3 variants / CSS audit / a11y review → consult Gemini via `mcp__gemini-cli__*`; CC implements and verifies in browser
+- Gemini unavailable → CC continues, never blocks
+
 ### UI Style (Frontend Default)
 
 - Default: shadcn/ui + `"style": "radix-nova"` + `baseColor: neutral` + `iconLibrary: lucide`
@@ -191,6 +201,7 @@ After each task completes, run priority cascade:
 - Skill: `~/.claude/skills/claude-codex-orchestration/SKILL.md`
 - Maintainability harness: `~/.claude/skills/claude-codex-orchestration/references/maintainability-harness.md`
 - UI style standard: `~/.claude/skills/claude-codex-orchestration/references/ui-style-standard.md`
+- Gemini integration (frontend specialist): `~/.claude/skills/claude-codex-orchestration/references/gemini-integration.md`
 - Solved problems (if present): `docs/solutions/`
 TEMPLATE
       printf '%s\n' "$pointer" > CLAUDE.md
@@ -283,14 +294,14 @@ Show plan. Wait for confirm. Then execute. Optional: run `/co:plan-review` for C
 
 **Split by boundary clarity, not by frontend/backend.** Codex isn't a frontend specialist; this table is a starting heuristic based on "bounded modules parallelize better", not a capability claim.
 
-| Claude Code (Tech Lead) | Codex (Parallel Implementer) |
-|-------------------------|------------------------------|
-| Requires repo-wide context (architecture, cross-cutting refactor) | Any **backend/script** module with clear file/API boundaries |
-| Coordinates multiple subsystems | Independently verifiable (has its own tests or clear acceptance criteria) |
-| Touches migrations, CI/CD, release pipelines | Isolated bug fixes with known scope |
-| **Frontend work** — UI components, pages, interactions, styling, design systems (default: shadcn/ui + radix-nova, see `references/ui-style-standard.md`) | Parallel candidate implementations (compare and pick) |
-| Integrates others' output | Current diff review (read-only) |
-| Makes final decisions on interfaces | — |
+| Claude Code (Tech Lead + primary executor) | Codex (Parallel Implementer) | Gemini (Specialist Consultant) |
+|--------------------------------------------|------------------------------|--------------------------------|
+| Requires repo-wide context (architecture, cross-cutting refactor) | Any **backend/script** module with clear file/API boundaries | Frontend design direction (2–3 variants, aesthetic review) |
+| Coordinates multiple subsystems | Independently verifiable (has its own tests or clear acceptance criteria) | CSS architecture / a11y / responsive audits |
+| Touches migrations, CI/CD, release pipelines | Isolated bug fixes with known scope | UI consistency scan across multiple files |
+| **Frontend work** — UI components, pages, interactions, styling, design systems (default: shadcn/ui + radix-nova, see `references/ui-style-standard.md`) | Parallel candidate implementations (compare and pick) | "Not ugly but not great" second opinion |
+| Integrates others' output | Current diff review (read-only) | Large-context repo architecture summary |
+| Makes final decisions on interfaces | — | — |
 
 **Why frontend → CC by default:** Claude (Sonnet 4.6+) has strong frontend judgment — component design, state management, CSS/design-system coherence, UX edge cases. Codex excels at bounded backend modules and scripts where the interface is stable and the test set is explicit. Assign backward from what each does *best*, not from category stereotypes.
 
@@ -311,6 +322,51 @@ Show plan. Wait for confirm. Then execute. Optional: run `/co:plan-review` for C
 - **Co-Decision:** route CC's internal questions to Codex before asking user — keeps input flow uninterrupted
 - **Security gate:** scan task spec, block DB/env/CI/secrets, confirm high-risk
 - **Quality tracking:** rolling 20-dispatch window, penalty < 40% success rate, hard stop at 3+ consecutive failures
+
+---
+
+## Gemini Consultation (Frontend/UI Specialist)
+
+**Relationship:** CC orchestrator → Gemini specialist → CC fallback. Gemini advises; CC always implements and verifies.
+
+**Fact priority:** browser runtime behavior > local code context > Gemini suggestion. Never treat Gemini as ground truth.
+
+### When to call
+
+| Call Gemini | Don't call Gemini |
+|-------------|-------------------|
+| Large UI revamp, new page/module | Small style fixes, copy tweaks |
+| Need 2–3 visual/interaction variants | Rapid trial-and-error runtime issues |
+| Component structure / info architecture unclear | Browser debugging (console, network, DOM) |
+| Multi-file UI/CSS consistency audit | Urgent blocking tasks |
+| a11y / responsive / semantic HTML review | Tasks CC finishes in < 2 minutes |
+| "Not ugly but not great" second opinion | — |
+
+### Invocation
+
+Via `mcp__gemini-cli__*` MCP tools only (never API key). Prompts are natural language, not XML:
+
+```
+ask gemini to propose 3 UI variants for [component], prioritize [criterion]
+ask gemini to audit CSS architecture for responsive inconsistencies in src/pages/
+ask gemini to review the current diff for frontend issues (naming, a11y, perf)
+```
+
+Ask Gemini to return: `recommendation / alternatives / risks / implementation notes`.
+
+### Fallback
+
+Gemini unavailable (MCP error, timeout, rate limit) → CC continues without waiting. Log as `category: gemini-unavailable` in `.error-log.jsonl`. **Never block on Gemini availability.**
+
+### Routing vs Codex Co-Decision
+
+| Question nature | Route to |
+|-----------------|----------|
+| Code architecture, bug classification, risk triage | Codex Co-Decision |
+| Frontend design direction, UI aesthetics, a11y | Gemini consultation |
+| Both applicable | Pick closest to failure mode. Never ask both on same question. |
+
+Full workflow, hook config, and integration rules in `references/gemini-integration.md`.
 
 ---
 
