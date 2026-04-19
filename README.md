@@ -37,6 +37,7 @@ Claude Code（Tech Lead）
 | 6. 思考与决策 | `/co:think`（产品/技术双模式）、`/co:plan-review`（CEO 级 4 模式） |
 | 7. 工程原则 | Hyrum's Law、Beyoncé Rule、测试金字塔、Chesterton's Fence、Trunk-Based、Shift Left、Feature Flag、Deprecation |
 | 7.5. UI 样式规范 | shadcn/ui + `radix-nova` 默认；支持从任意网页提取设计 tokens 映射到 shadcn 覆盖层 |
+| 7.6. 下一步决策流 | 每个任务后先跑测试；阻塞性失败立即修，非阻塞建 gh issue 继续；计划完成后统一处理未决 issue |
 | 8. 自我纠错与知识复利 | 三层自我纠错（eval/capture/promote）、darwin 棘轮、`/co:compound` 知识沉淀 |
 
 ---
@@ -415,6 +416,70 @@ PREMISES:
 - 禁止使用 Tailwind 任意值（`p-[13px]`）当 scale 有合法 token
 
 详见 `references/ui-style-standard.md`（234 行完整规范）。
+
+## 7.6. 下一步决策流层（任务间切换的强制优先级）
+
+**每个任务完成后，按以下优先级决定下一步，不允许跳步省时间。**
+
+### Priority 1 — 先跑测试（任何情况下）
+
+```
+运行：tests + lint + type check
+├─ 全通过  → Priority 3（下一任务）
+└─ 有失败 → Priority 2（分诊）
+```
+
+例外：无。纯文档改动也跑 linter。这是 Shift Left 原则的具体化。
+
+### Priority 2 — 失败分诊
+
+**阻塞性失败（先修）：**
+- 刚实现的功能的测试
+- 改动触及代码路径上原本绿色的测试
+- 修改文件里的 build/type/lint 错
+- 影响关键路径的回归
+
+→ **立即修，不继续下一任务**。修到绿再往下。
+
+**非阻塞失败（建 issue，继续）：**
+- 碰巧断的无关模块测试
+- 已知的 flaky 测试
+- 与当前任务无关的预存失败
+- 修改文件里的 warning（非 error）
+
+→ **建 GitHub issue，继续开发：**
+```bash
+gh issue create \
+  --title "[bug] <一句话失败描述>" \
+  --label "todo,non-blocking" \
+  --body "Reproduction: ... Expected: ... Actual: ... Affected: ... Context: discovered during <当前任务>"
+```
+
+**无法判断是否阻塞？** → Codex Co-Decision：让 Codex 分诊并给置信度。低置信度才问用户。
+
+### Priority 3 — 从 Execution Plan 取下一任务
+
+宣告："Next: [task]. Verify: [command]."
+
+### Priority 4 — Plan 全部完成 → Issue 统一处理循环
+
+计划完成，**不立即 push**。先拉取未决 issue：
+```bash
+gh issue list --state open --label todo --json number,title,labels --limit 20
+```
+
+向用户展示列表，问："Plan 完成，有 N 个未决 todo（H/M/L 各几个）。现在处理，还是推迟到下次？"
+
+**现在处理：**
+1. 按 label 排：high > medium > low
+2. 每个 issue：`gh issue view <N>` → mini plan → fix → `git commit -m "fix ... closes #N"` → 回 Priority 1 跑测试
+3. 全部处理完 → 走 Integration Phase
+
+**推迟：**
+- 直接 Integration Phase + push
+- Issue 留给下次会话
+
+**两条路径都强制：** push 前触发 §5.3 code review prompt（"是否需要触发一次全量代码审核？"）
 
 ---
 

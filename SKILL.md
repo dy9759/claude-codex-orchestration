@@ -170,6 +170,16 @@ agents_bootstrap() {
 3. Integrate once — single writer per file at any moment
 4. Verify: tests + lint + type check before push
 
+### Next-Step Decision Flow (between tasks)
+
+After each task completes, run priority cascade:
+1. **Run tests first** — always, no exceptions
+2. **If tests fail:**
+   - *Blocking* (feature test / was-green regression / build / type / lint in modified files) → fix immediately
+   - *Non-blocking* (unrelated module / flaky / pre-existing / warning) → create `gh issue create --label "todo,non-blocking"`, continue
+3. **If tests pass** → next task from Execution Plan
+4. **When Plan complete** → `gh issue list --state open --label todo` → triage loop before push
+
 ### UI Style (Frontend Default)
 
 - Default: shadcn/ui + `"style": "radix-nova"` + `baseColor: neutral` + `iconLibrary: lucide`
@@ -301,6 +311,92 @@ Show plan. Wait for confirm. Then execute. Optional: run `/co:plan-review` for C
 - **Co-Decision:** route CC's internal questions to Codex before asking user — keeps input flow uninterrupted
 - **Security gate:** scan task spec, block DB/env/CI/secrets, confirm high-risk
 - **Quality tracking:** rolling 20-dispatch window, penalty < 40% success rate, hard stop at 3+ consecutive failures
+
+---
+
+## Next-Step Decision Flow
+
+After finishing any task (CC's own or Codex output integrated), run this priority cascade before starting the next one. **Never skip steps to "save time" — "I'll test later" is a blocked rationalization.**
+
+### Priority 1 — Run tests (always first)
+
+After any code change, run the relevant verification before anything else:
+
+```
+run: tests + lint + type check
+├─ all pass → go to Priority 3 (next task)
+└─ any fail → go to Priority 2 (triage)
+```
+
+Exception: none. Pure-doc changes still run linters. This is Shift Left in practice (`references/engineering-principles.md`).
+
+### Priority 2 — Test Failure Triage
+
+Classify the failure, then act accordingly.
+
+**Blocking failure** (fix before proceeding):
+- Test for the feature CC just implemented
+- A test that was green before CC's change on the touched code path
+- Build fails / type error / lint error in the modified files
+- Regression that affects the critical user path
+
+→ **Fix immediately**. Do not proceed to the next task. Re-run tests until green.
+
+**Non-blocking failure** (capture, continue):
+- Test in an unrelated module that coincidentally breaks
+- Known-flaky test
+- Pre-existing failure unrelated to current task
+- Warning (not error) in modified files
+
+→ **Create a GitHub issue**, then continue:
+
+```bash
+gh issue create \
+  --title "[bug] <specific failure — one line>" \
+  --label "todo,non-blocking" \
+  --body "$(cat <<'EOF'
+**Reproduction:** <command or steps>
+**Expected:** <behavior>
+**Actual:** <behavior + short error excerpt>
+**Affected files:** <paths>
+**Context:** discovered during <current task name>
+EOF
+)"
+```
+
+Record the issue number in the Execution Plan's `Deferred` section so it doesn't get lost.
+
+**Unclear whether blocking?** Route through Codex Co-Decision: ask Codex to classify with `confidence` level. If low confidence → escalate to user one-line question.
+
+### Priority 3 — Next task from Execution Plan
+
+Pick the next incomplete item. Announce: "Next: [task]. Verify: [command]."
+
+### Priority 4 — Plan Complete → Issue Triage Loop
+
+When all Execution Plan tasks are done, **do not push yet**. Run the issue triage loop first:
+
+```bash
+gh issue list --state open --label todo --json number,title,labels --limit 20
+```
+
+Present list to user:
+> "Plan done. Found N open todos (H high / M medium / L low). Address now, or defer to next session?"
+
+**If address now:**
+1. Sort by priority label: `priority: high` > `priority: medium` > `priority: low`
+2. For each issue:
+   - `gh issue view <N>` → load context
+   - Mini Execution Plan if multi-step; otherwise direct fix
+   - Commit with `closes #N` in the message (auto-closes on push)
+   - Run Priority 1 again (tests)
+3. After all addressed → final integration check (see Integration Phase)
+
+**If defer:**
+- Proceed to Integration Phase + final push
+- Issues remain for next session
+
+Either path: **before any `git push`**, the `§5.3 code review prompt` from CLAUDE.md fires — ask user "是否需要触发一次全量代码审核？"
 
 ---
 
