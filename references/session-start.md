@@ -320,6 +320,139 @@ Rule:
 1. Plugin Detection → `~/.claude/.orch-plugin-hints-shown`
 2. AGENTS.md Bootstrap → no sentinel; state-based idempotent
 3. Global CLAUDE.md §5.2 Auto-Seed → `~/.claude/.orch-claude-md-seeded`
+4. Skill Self-Update Check → `~/.claude/.orch-update-last-check` (+ preference files)
+
+---
+
+## Part 4: Skill Self-Update Check (git-based)
+
+**Intent:** The skill itself is a git repo cloned from `https://github.com/dy9759/claude-codex-orchestration`. This check detects when the local clone is behind `origin/main` and offers to pull.
+
+**Default cadence:** check every **3 days** (not every session — avoids network round-trip overhead and user nag).
+
+**Three user preferences (persist across sessions):**
+- `~/.claude/.orch-auto-update` — always pull silently, no prompt
+- `~/.claude/.orch-update-disabled` — never check, fully opt-out
+- *(neither set)* — default: check every 3 days, prompt on update
+
+### Detection Flow
+
+```bash
+skill_update_check() {
+  local skill_dir=~/.claude/skills/claude-codex-orchestration
+  local last_check=~/.claude/.orch-update-last-check
+  local auto_flag=~/.claude/.orch-auto-update
+  local disabled_flag=~/.claude/.orch-update-disabled
+  local interval_days=3
+
+  # User opted out
+  [ -f "$disabled_flag" ] && return 0
+
+  # Cadence gate — skip if checked recently (ignored when --auto-update is set)
+  if [ ! -f "$auto_flag" ] && [ -f "$last_check" ]; then
+    local mtime now diff
+    mtime=$(stat -f %m "$last_check" 2>/dev/null || stat -c %Y "$last_check" 2>/dev/null)
+    now=$(date +%s)
+    diff=$(( (now - mtime) / 86400 ))
+    [ "$diff" -lt "$interval_days" ] && return 0
+  fi
+
+  cd "$skill_dir" 2>/dev/null || return 0
+
+  # Refuse if local uncommitted changes — don't risk user's WIP
+  if ! git diff --quiet HEAD 2>/dev/null || [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+    touch "$last_check"
+    # Silent skip; user is actively editing
+    return 0
+  fi
+
+  # Fetch silently; fail gracefully (offline, bad remote, etc.)
+  git fetch origin main --quiet 2>/dev/null || { touch "$last_check"; return 0; }
+
+  local local_commit remote_commit behind_count
+  local_commit=$(git rev-parse main 2>/dev/null)
+  remote_commit=$(git rev-parse origin/main 2>/dev/null)
+  [ -z "$local_commit" ] || [ -z "$remote_commit" ] && { touch "$last_check"; return 0; }
+
+  # Up-to-date
+  if [ "$local_commit" = "$remote_commit" ]; then
+    touch "$last_check"
+    return 0
+  fi
+
+  # Local is ahead of remote (user is the dev) — skip silently
+  if git merge-base --is-ancestor "$remote_commit" "$local_commit" 2>/dev/null; then
+    touch "$last_check"
+    return 0
+  fi
+
+  # Behind — fetch count and show latest changes
+  behind_count=$(git rev-list --count "$local_commit..$remote_commit")
+  local latest=$(git log --oneline "$local_commit..$remote_commit" | head -5)
+
+  # Auto-pull branch
+  if [ -f "$auto_flag" ]; then
+    git pull --ff-only origin main --quiet 2>&1 | head -3
+    echo "[Orchestration] Auto-pulled $behind_count commits from origin/main."
+    touch "$last_check"
+    return 0
+  fi
+
+  # Interactive branch — use Question Format Standard
+  echo "[Orchestration] Skill is $behind_count commit(s) behind origin/main:"
+  echo "$latest" | sed 's/^/    /'
+  echo ""
+  echo "Q: Pull latest skill updates now?"
+  echo ""
+  echo "Options:"
+  echo "  y.      Pull now — fast-forward merge"
+  echo "  n.      Skip this time (re-prompt in $interval_days days)"
+  echo "  always. Pull automatically on future Session Start (recommended for stable machines)"
+  echo "  never.  Disable this check entirely"
+  echo ""
+  echo "Recommendation: y (confidence: high)"
+  echo "  CC: your clone is $behind_count commits behind; pulling keeps rules/references fresh."
+  echo "  Codex: not consulted (routine update, no architectural decision)."
+  echo "  Gemini: N/A."
+  echo ""
+  echo "Reply: y / n / always / never"
+
+  # CC reads reply:
+  # y     → git pull --ff-only origin main; touch last_check
+  # n     → touch last_check (re-prompt after interval)
+  # always → touch auto_flag; git pull --ff-only; touch last_check
+  # never  → touch disabled_flag
+}
+
+skill_update_check
+```
+
+### Safety Rules
+
+- **`git pull --ff-only`** — never merge-commit, never rebase; if remote diverges, abort and warn
+- **Refuse on dirty worktree** — if user has local uncommitted changes, skip silently (never discard user WIP)
+- **Refuse on ahead state** — if local is ahead of remote (user is the dev), skip silently
+- **Graceful offline** — `git fetch` failure just touches sentinel and proceeds (skill still works offline)
+- **Question Format Standard compliant** — recommendation + agent views + 4-option choice with tradeoffs
+
+### State Files
+
+| File | Purpose | Set by |
+|------|---------|--------|
+| `~/.claude/.orch-update-last-check` | Last check timestamp (mtime) | Every run of this function |
+| `~/.claude/.orch-auto-update` | User chose "always pull" | User answered `always` |
+| `~/.claude/.orch-update-disabled` | User chose "never check" | User answered `never` |
+
+**Reset:**
+- Re-enable checks: `rm ~/.claude/.orch-update-disabled`
+- Switch back to prompted mode: `rm ~/.claude/.orch-auto-update`
+- Force check on next session: `rm ~/.claude/.orch-update-last-check`
+
+### Interaction with Layer 0 / §5.2 versioning
+
+After a successful pull:
+- Session Start Part 3 will re-run → detect version delta if §5.2 block moved to v2 → offer CLAUDE.md update (surgical replacement)
+- Layer 0 rubric didn't move; `.skill-scores.jsonl` from remote is merged (it's git-tracked and append-only, so conflicts are rare)
 
 ---
 

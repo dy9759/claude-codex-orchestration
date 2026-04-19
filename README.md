@@ -288,7 +288,7 @@ Codex 失败 / 集成被拒 / learn-rule 触发 → `.error-log.jsonl` 5 类：d
 
 ## Session Start（自动执行）
 
-**首次调用时跑三件事（都有 sentinel 防重复）：**
+**首次调用时跑四件事（都有 sentinel 防重复）：**
 
 ### 1. Optional Plugin Detection
 读 `~/.claude/plugins/installed_plugins.json`，缺失 `caveman` / `compound-engineering` / `superpowers` 时一次性提示安装链接。Sentinel 文件 `~/.claude/.orch-plugin-hints-shown`。**永不阻断。**
@@ -321,6 +321,34 @@ Codex 失败 / 集成被拒 / learn-rule 触发 → `.error-log.jsonl` 5 类：d
 **当前 ship 版本：v1。** 升级 §5.2 内容时（新 trigger / 规则 / 结构变），同 commit 里 bump 版本号 + 更新 `CLAUDE.md.template`。
 
 Sentinel: `~/.claude/.orch-claude-md-seeded`。重置：`rm` 这个文件即可重新走一轮检测。
+
+### 4. Skill Self-Update Check（git 拉取）🔥 v2026-04
+
+Skill 本身是 git 仓库（clone 自 `dy9759/claude-codex-orchestration`）。每 **3 天** 自动检查本地是否落后于 `origin/main`：
+
+| 情况 | 动作 |
+|------|------|
+| 上次检查 < 3 天前 | 静默跳过（除非已开 `always` 模式）|
+| 有本地未提交改动 | 静默跳过（不碰用户 WIP）|
+| 本地 HEAD = 远程 HEAD | 标 sentinel 时间，静默 |
+| 本地 HEAD 领先远程（开发者）| 静默跳过 |
+| 本地落后 N 个 commit | 按 Question Format Standard 问用户：**y / n / always / never**，附最新 5 条 commit 摘要 |
+
+**user preferences（持久）：**
+- `~/.claude/.orch-auto-update` — 选 always，未来静默自动 pull
+- `~/.claude/.orch-update-disabled` — 选 never，完全禁用此检查
+- 都未设 → 每 3 天提示一次
+
+**安全保障：**
+- `git pull --ff-only`（不 merge 不 rebase，分叉就 abort）
+- 本地有未提交改动 → 跳过
+- 本地领先远程 → 跳过
+- 离线 / 无网 → `fetch` 失败后静默忽略，skill 仍工作
+
+**Sentinel：** `~/.claude/.orch-update-last-check`（timestamp）。
+**重置：** `rm ~/.claude/.orch-update-disabled`（重新启用）、`rm ~/.claude/.orch-auto-update`（切回提问模式）、`rm ~/.claude/.orch-update-last-check`（强制下次会话检查）。
+
+**与 §5.2 版本化联动：** pull 成功后，Part 3 会自动重新检查 §5.2 版本；如 skill 升级把 §5.2 从 v1 升到 v2，Part 3 会 offer surgical 更新用户的 CLAUDE.md。
 
 ---
 

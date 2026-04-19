@@ -25,7 +25,7 @@ These hold regardless of what's in the host machine's CLAUDE.md:
 4. **Execution Plan required** — never write code without a Plan confirmed by user. Every task has explicit `verify:` step.
 5. **Single writer per file** — never assign same file to both agents simultaneously.
 6. **Size limits** — new files ≤ 500 lines; functions ≤ 80 lines; nesting ≤ 3 levels. Flag violations at integration.
-7. **Session Start (first invocation)** — run `session-start.md` protocol: (1) optional plugin detection, (2) AGENTS.md bootstrap, (3) global `~/.claude/CLAUDE.md` §5.2 auto-seed if missing. All one-shot, silent after first effective run.
+7. **Session Start (first invocation)** — run `session-start.md` protocol: (1) optional plugin detection, (2) AGENTS.md bootstrap, (3) global `~/.claude/CLAUDE.md` §5.2 auto-seed + version check, (4) skill self-update check (every 3 days, `git fetch origin main` + offer pull if behind). All gated by sentinels; silent after first effective run.
 8. **Post-edit score** — after any commit that modifies `SKILL.md`, `references/*.md`, `README.md`, or `CLAUDE.md.template`, compute the 8-dimension weighted score (see `self-correction.md` Layer 0) and append one line to `.skill-scores.jsonl`. Any single-dim drop ≥3 vs prior commit → justify in the commit message footer.
 9. **Every question includes a recommendation** — any user-facing interaction (pre-flight decisions, end-of-plan review, blocking interrupts, mode selection, y/n confirmations) must include: (a) options with one-line tradeoff, (b) **explicit recommendation** with confidence level, (c) agent views where relevant — CC always, Codex on code/arch questions, Gemini on UI/design. See `references/decision-protocol.md` §Question Format Standard.
 
