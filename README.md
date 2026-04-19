@@ -48,6 +48,7 @@ Claude Code（Tech Lead + 主执行者）
 | 7.5. UI 样式规范 | shadcn/ui + `radix-nova` 默认；支持从任意网页提取设计 tokens 映射到 shadcn 覆盖层 |
 | 7.6. 下一步决策流 | 每个任务后先跑测试；阻塞性失败立即修，非阻塞建 gh issue 继续；计划完成后统一处理未决 issue |
 | 7.7. Gemini 前端专项咨询 | 大型 UI 改版 / 方案发散 / CSS 架构审查 / a11y 审查时调用 Gemini（via gemini-cli MCP）；CC 始终实现并浏览器验证；Gemini 不可用 → CC 不阻塞继续 |
+| 7.8. 决策集中协议 | 所有用户决策前置到 Plan 确认 + 末端一次性汇总；执行中只有硬阻塞（安全/数据丢失/越界）才打断；中途决策静默队列 + 安全默认 |
 | 8. 自我纠错与知识复利 | 三层自我纠错（eval/capture/promote）、darwin 棘轮、`/co:compound` 知识沉淀 |
 
 ---
@@ -547,6 +548,108 @@ Gemini MCP 不可用（超时/限流/出错）→ CC 继续执行，**绝不阻�
 ```
 
 详见 `references/gemini-integration.md`（260 行完整规范）。
+
+## 7.8. 决策集中协议层（前置 + 末端，拒绝中途打断）
+
+**原则：** 所有用户决策集中到两个时刻 —— **Plan 确认前（pre-flight）** 和 **Plan 完成后（end-of-plan）**。执行过程中只有"硬阻塞"才中断用户，其他决策静默队列、应用安全默认、末端一次性汇总。
+
+### 决策时机分类
+
+| 类别 | 时机 | 举例 |
+|------|------|------|
+| **Pre-flight**（Plan 确认时批量问） | 执行**前** | Plan 批准、`/co:plan-review` 模式、预判的高风险操作、UI 主题变更、计划删除 |
+| **Queued**（日志 + 安全默认 + 末端问） | 执行**中**（非阻塞） | Codex review 发现、Gemini vs 浏览器冲突、Chesterton's Fence 非关键判断、网页样式提取应用 |
+| **Blocking**（立即打断，稀有） | 任何时候 | Dispatch Security Gate BLOCKED 模式、无备份的破坏操作、跨 scope 写入、数据丢失风险 |
+| **End-of-plan**（单次汇总 prompt） | Priority 1–3 全完成后 | 未决 `todo` issue + 队列决策 + milestone 候选菜单 |
+
+### Pre-flight 批量问（Plan 确认时）
+
+CC 扫描 Plan 里每个任务，识别**预判决策点**，在 Plan 旁边一次性列出。用户一行回答全部：
+
+```
+Plan ready. 执行前 4 个决策：
+
+[1] Task T3 将跨 auth/ 模块批量重命名 12 个文件。批准？(y/n)
+[2] Task T5 将改 radix-nova primary 色为品牌色。批准？(y/n)
+[3] Task T7 计划删除 legacy-auth.ts（用途不明，Chesterton's Fence）。
+    → 保留 / 删除 / 先调研再问 (k/d/i)
+[4] Task T9 需要 2–3 个 dashboard UI 方案。咨询 Gemini？(y/n)
+
+回复示例: 1y 2n 3k 4y
+```
+
+CC 存到 `.decisions-approved`，执行期不再问。
+
+### 中途队列（不打断）
+
+执行期遇到未预批的决策：
+
+```
+if 是阻塞（安全阻断/数据丢失/越界）:
+    立即打断，一行 prompt
+else:
+    写入 .decisions-pending，应用安全默认，日志 "[Decision queued]"
+    继续执行
+```
+
+**各场景安全默认：**
+
+| 场景 | 安全默认 |
+|------|---------|
+| Codex review 发现（任何严重度） | 仅呈现，不自动修 |
+| Gemini 建议与浏览器运行矛盾 | 跟随浏览器，记 Gemini 异议 |
+| Chesterton's Fence（用途不明代码）| 保留代码，记录谜团 |
+| UI 网页样式提取应用 | 写预览分支，不触 main |
+| 非阻塞测试失败 | `gh issue create --label "todo,non-blocking"` |
+
+### 强制阻塞例外（仍立即中断）
+
+**不可队列：**
+1. Dispatch Security Gate BLOCKED 模式被尝试（DB 迁移、env、CI、密钥、强删、git 历史改写）
+2. 无备份的破坏操作
+3. 跨 scope 写入（Codex 动了 `Off-limits:` 文件）
+4. Codex 报告 CRITICAL 级别且颠覆任务前提
+5. Plan 真的无法继续（不是仅仅"尴尬"）
+
+格式：`"BLOCKING: <什么>. <A> 还是 <B>?"`
+
+### 末端一次性汇总（Plan 完成后）
+
+合并三股数据流为**单次 prompt**：
+
+```
+## Plan 完成，测试全绿。Push 前统一 review：
+
+A. 执行中队列决策（3 条）：
+   A1. Task T5 — Codex review 3 条 medium 发现. 现在修 / 建 issue / 忽略?
+   A2. Task T7 — Gemini 建议调整 dashboard 卡片顺序；浏览器两种都 OK. 应用 / 跳过?
+   A3. Task T9 — 网页提取建议改 2 个色 token. 应用 / 跳过?
+
+B. 现有未决 issue（2 条）：
+   B1. #61 — real-meeting retest (priority: high)
+   B2. #73 — [bug] Safari CSS 动画闪烁 (priority: low, non-blocking)
+
+C. 下一个 milestone 候选（4 条，来自 Phase 0 路线图）：
+   C1. F — meeting REST handler wire
+   C2. T — real cloud-sync target (MyMemo Hub)
+   C3. U — frontend memory list + filter UI
+   C4. V — MCP tool e2e
+
+D. 立刻 push？（push 前强制 §5.3 全量代码审核提示）
+
+回复格式: "A1=fix A2=apply A3=skip B=B1-now C=C2 D=y" 或自由答
+```
+
+一轮回完。CC 原子处理所有决策 → 跑 Priority 1 → §5.3 提示 → push。
+
+### 状态文件
+
+| 文件 | 生命周期 |
+|------|---------|
+| `.decisions-approved` | Plan 确认时写入，Plan 完成时清理 |
+| `.decisions-pending` | 执行中 append，End-of-plan 消费后清理 |
+
+两个都 `.gitignore`d。
 
 ---
 

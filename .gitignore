@@ -6,6 +6,10 @@
 # Per-user sentinels
 .orch-plugin-hints-shown
 
+# Per-plan decision state (regenerated each Plan cycle)
+.decisions-pending
+.decisions-approved
+
 # OS / editor cruft
 .DS_Store
 *.swp
