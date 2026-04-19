@@ -1,6 +1,6 @@
 ---
 name: claude-codex-orchestration
-description: Use when coordinating Claude Code + Codex as dual agents, delegating parallel implementation to Codex, splitting frontend/backend work, controlling token consumption, cross-harness setup (Cursor/Codex/OpenCode), pre-task thinking (/co:think), strategic plan review (/co:plan-review), engineering principles enforcement (Hyrum, Beyoncé, Chesterton, trunk-based, shift-left, feature-flags, deprecation, maintainability harness), and knowledge compounding. Self-contained; optional plugins auto-detected.
+description: Use when coordinating Claude Code + Codex as dual agents, delegating parallel implementation of bounded modules to Codex, splitting work by boundary-clarity not domain, controlling token consumption, cross-harness setup (Cursor/Codex/OpenCode), pre-task thinking (/co:think), strategic plan review (/co:plan-review), engineering principles enforcement (Hyrum, Beyoncé, Chesterton, trunk-based, shift-left, feature-flags, deprecation, maintainability harness), and knowledge compounding. Self-contained; optional plugins auto-detected.
 ---
 
 # Claude Code + Codex Orchestration
@@ -150,8 +150,8 @@ agents_bootstrap() {
 
 ### Role Definitions
 
-- **Claude Code** — Tech Lead / Orchestrator. Owns repo exploration, architecture, backend, scripts, CI/CD, integration.
-- **Codex** — Parallel Implementer. Owns frontend, UI, isolated feature modules, parallel solution attempts, diff review.
+- **Claude Code** — Tech Lead / Orchestrator. Owns architecture, cross-module decisions, integration, frontend work (UI components, pages, interactions, styling), anything needing repo-wide context (migrations, CI/CD, release coordination).
+- **Codex** — Parallel Implementer. Owns bounded backend/script modules with clear boundaries and independent verifiability (isolated features, self-contained scripts, parallel solution attempts, diff review).
 
 ### Blocked File Patterns (Codex never writes these)
 
@@ -261,15 +261,24 @@ Show plan. Wait for confirm. Then execute. Optional: run `/co:plan-review` for C
 
 ---
 
-## Default Work Distribution
+## Default Work Distribution (boundary-based, not domain-based)
 
-| Claude Code | Codex |
-|-------------|-------|
-| Repo explore + design | Frontend pages, UI, interactions |
-| Backend logic, APIs, data flow | Screenshot/design-driven fixes |
-| Scripts, migrations, CI/CD | Independent feature modules |
-| High-risk / cross-cutting changes | Parallel solution attempts |
-| Final integration + release | Current diff review |
+**Split by boundary clarity, not by frontend/backend.** Codex isn't a frontend specialist; this table is a starting heuristic based on "bounded modules parallelize better", not a capability claim.
+
+| Claude Code (Tech Lead) | Codex (Parallel Implementer) |
+|-------------------------|------------------------------|
+| Requires repo-wide context (architecture, cross-cutting refactor) | Any **backend/script** module with clear file/API boundaries |
+| Coordinates multiple subsystems | Independently verifiable (has its own tests or clear acceptance criteria) |
+| Touches migrations, CI/CD, release pipelines | Isolated bug fixes with known scope |
+| **Frontend work** — UI components, pages, interactions, styling, design systems | Parallel candidate implementations (compare and pick) |
+| Integrates others' output | Current diff review (read-only) |
+| Makes final decisions on interfaces | — |
+
+**Why frontend → CC by default:** Claude (Sonnet 4.6+) has strong frontend judgment — component design, state management, CSS/design-system coherence, UX edge cases. Codex excels at bounded backend modules and scripts where the interface is stable and the test set is explicit. Assign backward from what each does *best*, not from category stereotypes.
+
+**Practical heuristic:** If the task can be described with `Scope: [paths]` + `Off-limits: [paths]` + a verifiable done-state, **and** it's backend/script/isolated, dispatch to Codex. Frontend and cross-cutting work stays on CC unless there's a specific reason to parallelize.
+
+**Calibration:** This is v0 default. Run 5+ real sessions, then use `.eval-scores.jsonl` weak-point data to adjust per-project (via `/co:review` + `/co:promote`).
 
 ---
 
@@ -296,7 +305,7 @@ Create when:
 
 Rules:
 - One writer per worktree — no shared write
-- Naming: `feature/<agent>-<desc>` (e.g. `feature/codex-ui-redesign`)
+- Naming: `feature/<agent>-<desc>` (e.g. `feature/codex-auth-module`)
 - Branch lifetime ≤ 1–3 days (trunk-based; see `references/engineering-principles.md`)
 - Merge: diff review → cherry-pick or manual integrate
 - See `superpowers:using-git-worktrees` for setup (if installed); otherwise standard `git worktree add`
