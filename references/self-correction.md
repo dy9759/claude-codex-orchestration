@@ -6,7 +6,7 @@ Four-layer mechanism: **score skill edits → evaluate sessions → capture erro
 
 ## Layer 0: Skill Modification Score (`/co:score`) — auto-fire after every skill edit
 
-**Trigger:** Any commit that modifies `SKILL.md`, `references/*.md`, `CLAUDE.md.template`, or the AGENTS.md template inside `references/session-start.md`.
+**Trigger:** Any commit that modifies `SKILL.md`, `references/*.md`, `README.md`, `CLAUDE.md.template`, or the AGENTS.md template inside `references/session-start.md`. (README.md included because it directly affects the Documentation Quality and Usability dimensions.)
 
 **Action:** After staging changes (before the commit message is finalized), compute the 8-dimension weighted score and append to `.skill-scores.jsonl` in repo root. Include the score in the commit message footer.
 

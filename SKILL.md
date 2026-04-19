@@ -26,7 +26,7 @@ These hold regardless of what's in the host machine's CLAUDE.md:
 5. **Single writer per file** — never assign same file to both agents simultaneously.
 6. **Size limits** — new files ≤ 500 lines; functions ≤ 80 lines; nesting ≤ 3 levels. Flag violations at integration.
 7. **Session Start (first invocation)** — run `session-start.md` protocol: optional plugin detection + AGENTS.md bootstrap (both one-shot, silent after first effective run).
-8. **Post-edit score** — after any commit that modifies `SKILL.md`, `references/*.md`, or `CLAUDE.md.template`, compute the 8-dimension weighted score (see `self-correction.md` Layer 0) and append one line to `.skill-scores.jsonl`. Any single-dim drop ≥3 vs prior commit → justify in the commit message footer.
+8. **Post-edit score** — after any commit that modifies `SKILL.md`, `references/*.md`, `README.md`, or `CLAUDE.md.template`, compute the 8-dimension weighted score (see `self-correction.md` Layer 0) and append one line to `.skill-scores.jsonl`. Any single-dim drop ≥3 vs prior commit → justify in the commit message footer.
 
 ---
 
