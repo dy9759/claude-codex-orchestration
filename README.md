@@ -288,21 +288,26 @@ Codex 失败 / 集成被拒 / learn-rule 触发 → `.error-log.jsonl` 5 类：d
 
 ---
 
-## Invocation Prompts（mnemonic，非注册 slash command）
+## Invocation Commands（已注册 slash command — 用 `/co-*` hyphen 形式）🔥 v2026-04-20
 
-> 这些 `/co:*` 不是真正的 Claude Code slash command（不会出现在补全里），而是**记忆 prompt**。在聊天里输入即触发对应 reference 文件的工作流。
+> **升级：** 从观测失败 `"Unknown command: /co:eval"` 中学习—旧冒号形式只是文档里的记忆 prompt，现在把 9 个全部注册为真实 Claude Code 子 skill。**用 hyphen `/co-*`，会出现在 `/` 补全里。**
 
-| Prompt | 用途 | 加载 |
-|--------|------|------|
-| `/co:score` | Skill 编辑后 8 维打分（skill 文件 commit 自动触发）| `self-correction.md` |
-| `/co:think` | 模糊任务前置思考 | `thinking-decision.md` |
-| `/co:plan-review` | Plan 草拟后 CEO 级审核 | `thinking-decision.md` |
-| `/co:eval` | 会话结束双轴评分 | `self-correction.md` |
-| `/co:review` | 每 5 会话扫错误日志 | `self-correction.md` |
-| `/co:promote` | 将 ≥6 分候选写回 SKILL.md | `self-correction.md` |
-| `/co:loop` | 自主后台打磨（ScheduleWakeup 270s）| `self-correction.md` |
-| `/co:compound` | 解决问题后沉淀知识 | `knowledge-compounding.md` |
-| `/co:sessions` | 开工前检索历史会话 | `knowledge-compounding.md` |
+| 命令 | 用途 | 加载 |
+|------|------|------|
+| `/co-score` | Skill 编辑后 8 维打分（Layer 0 自动触发）| `self-correction.md` |
+| `/co-think` | 模糊任务前置思考 | `thinking-decision.md` |
+| `/co-plan-review` | Plan 草拟后 CEO 级审核 | `thinking-decision.md` |
+| `/co-eval` | 会话结束双轴评分（或长会话压力触发）| `self-correction.md` |
+| `/co-review` | 每 5 会话扫错误日志 | `self-correction.md` |
+| `/co-promote` | 将 ≥6 分候选写回 SKILL.md | `self-correction.md` |
+| `/co-loop` | 自主后台打磨（ScheduleWakeup 270s）| `self-correction.md` |
+| `/co-compound` | 解决问题后沉淀知识 | `knowledge-compounding.md` |
+| `/co-sessions` | 开工前检索历史会话 | `knowledge-compounding.md` |
+
+**首次安装**（新机器 clone 后，或 Session Start Part 6 自动执行）：
+```bash
+bash ~/.claude/skills/claude-codex-orchestration/sub-skills/install.sh
+```
 
 ---
 
