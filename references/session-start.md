@@ -322,6 +322,7 @@ Rule:
 3. Global CLAUDE.md §5.2 Auto-Seed → `~/.claude/.orch-claude-md-seeded`
 4. Skill Self-Update Check → `~/.claude/.orch-update-last-check` (+ preference files)
 5. Escalation Queue Flush → pending `.issue-candidates.jsonl` entries retried when `gh` available (see Part 5)
+6. Sub-skill Install Check → seed `/co-*` registered commands on fresh machines (see Part 6)
 
 ---
 
@@ -454,6 +455,78 @@ skill_update_check
 After a successful pull:
 - Session Start Part 3 will re-run → detect version delta if §5.2 block moved to v2 → offer CLAUDE.md update (surgical replacement)
 - Layer 0 rubric didn't move; `.skill-scores.jsonl` from remote is merged (it's git-tracked and append-only, so conflicts are rare)
+
+---
+
+## Part 6: Sub-skill Install Check (`/co-*` commands on fresh machines)
+
+**Intent:** the skill ships 9 `/co-*` sub-skills under `sub-skills/`, but Claude Code only discovers skills at top-level `~/.claude/skills/*/SKILL.md`. On a fresh machine clone, the sub-skills exist in the repo but aren't yet registered as commands.
+
+**Check flow:**
+
+```bash
+sub_skill_install_check() {
+  local skill_dir=~/.claude/skills/claude-codex-orchestration
+  local source_dir=$skill_dir/sub-skills
+  local target_dir=~/.claude/skills
+  local sentinel=~/.claude/.orch-subskills-installed
+
+  # Fast path: sentinel says we've checked this source state before
+  local source_sha
+  source_sha=$(cd "$source_dir" 2>/dev/null && find . -name SKILL.md -exec cat {} \; | sha256sum | cut -c1-12)
+  [ -f "$sentinel" ] && [ "$(cat "$sentinel" 2>/dev/null)" = "$source_sha" ] && return 0
+
+  # Count how many co-* sub-skills are missing at target
+  local missing=0 missing_names=()
+  for d in "$source_dir"/co-*/; do
+    local name
+    name=$(basename "$d")
+    if [ ! -f "$target_dir/$name/SKILL.md" ]; then
+      missing=$((missing + 1))
+      missing_names+=("$name")
+    fi
+  done
+
+  if [ "$missing" = 0 ]; then
+    echo "$source_sha" > "$sentinel"
+    return 0
+  fi
+
+  # Missing sub-skills found — prompt user (Question Format Standard)
+  echo "[Orchestration] $missing /co-* sub-skill(s) not registered on this machine:"
+  printf '  - /%s\n' "${missing_names[@]}"
+  echo ""
+  echo "Q: Install now to enable these as real Claude Code slash commands?"
+  echo ""
+  echo "Options:"
+  echo "  y.   Install — copies sub-skills/co-*/ to ~/.claude/skills/co-*/"
+  echo "  n.   Skip — /co-* commands stay as manual chat invocations"
+  echo ""
+  echo "Recommendation: y (confidence: high)"
+  echo "  CC: without installation, /co-eval etc. return 'Unknown command'"
+  echo "      (observed failure mode). Install cost: ~9 tiny files, <5KB."
+  echo ""
+  echo "Reply: y / n"
+
+  # On y: run the install script:
+  #   bash $source_dir/install.sh
+  # then: echo "$source_sha" > "$sentinel"
+}
+
+sub_skill_install_check
+```
+
+**Re-run on source update:** sentinel stores a hash of the source sub-skill contents. When `git pull` (Part 4) changes any `sub-skills/co-*/SKILL.md`, the hash changes → install-check fires again offering to update the installed copies.
+
+**Manual install (alternative):**
+```bash
+bash ~/.claude/skills/claude-codex-orchestration/sub-skills/install.sh
+bash ~/.claude/skills/claude-codex-orchestration/sub-skills/install.sh --force  # overwrite local edits
+```
+
+**Reset:** `rm ~/.claude/.orch-subskills-installed` to re-run check on next session.
+
+**Design trade-off:** sub-skills duplicated from `sub-skills/` source to `~/.claude/skills/` install location. Chose copy (stable, portable) over symlink (fragile across volumes/cross-machine). The `install.sh --force` path + hash-sentinel handles drift detection.
 
 ---
 

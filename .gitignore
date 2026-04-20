@@ -19,6 +19,9 @@
 .last-eval-timestamp
 .skip-eval-this-session
 
+# Sub-skill install sentinel (per-user, per-machine)
+.orch-subskills-installed
+
 # Note: .issue-log.jsonl is TRACKED (evolution record, like .skill-scores.jsonl)
 
 # OS / editor cruft

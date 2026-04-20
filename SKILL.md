@@ -25,7 +25,7 @@ These hold regardless of what's in the host machine's CLAUDE.md:
 4. **Execution Plan required** — never write code without a Plan confirmed by user. Every task has explicit `verify:` step.
 5. **Single writer per file** — never assign same file to both agents simultaneously.
 6. **Size limits** — new files ≤ 500 lines; functions ≤ 80 lines; nesting ≤ 3 levels. Flag violations at integration.
-7. **Session Start (first invocation)** — run `session-start.md` protocol: (1) optional plugin detection, (2) AGENTS.md bootstrap, (3) global `~/.claude/CLAUDE.md` §5.2 auto-seed + version check, (4) skill self-update check (every 3 days, `git fetch origin main` + offer pull if behind). All gated by sentinels; silent after first effective run.
+7. **Session Start (first invocation)** — run `session-start.md` protocol: (1) optional plugin detection, (2) AGENTS.md bootstrap, (3) global `~/.claude/CLAUDE.md` §5.2 auto-seed + version check, (4) skill self-update check (every 3 days, `git fetch origin main` + offer pull if behind), (5) escalation queue flush, (6) sub-skill install check (seed `/co-*` registered commands from `sub-skills/` if missing). All gated by sentinels; silent after first effective run.
 8. **Post-edit score** — after any commit that modifies `SKILL.md`, `references/*.md`, `README.md`, or `CLAUDE.md.template`, compute the 8-dimension weighted score (see `self-correction.md` Layer 0) and append one line to `.skill-scores.jsonl`. Any single-dim drop ≥3 vs prior commit → justify in the commit message footer.
 9. **Every question includes a recommendation** — any user-facing interaction (pre-flight decisions, end-of-plan review, blocking interrupts, mode selection, y/n confirmations) must include: (a) options with one-line tradeoff, (b) **explicit recommendation** with confidence level, (c) agent views where relevant — CC always, Codex on code/arch questions, Gemini on UI/design. See `references/decision-protocol.md` §Question Format Standard.
 10. **Layer 2.5 External Escalation** — structural skill-level signals (recurrent root cause ≥2/7 sessions, Codex quality hard-stop, Darwin regression, structural flaw persisting 5+ sessions) auto-report to **skill repo** (`dy9759/claude-codex-orchestration`), not host project. Dedup by fingerprint `mechanism:category:root_cause`. Fallback queue `.issue-candidates.jsonl` when `gh` unavailable. Opt-out via `~/.claude/.orch-escalation-disabled`. See `references/self-correction.md` Layer 2.5.
@@ -54,21 +54,27 @@ Deep content lives in `references/` — load **only when needed** by task type. 
 
 ---
 
-## Invocation Prompts (mnemonic, not registered slash commands)
+## Invocation Commands (registered slash commands — use `/co-*` with hyphen)
 
-> Type these in chat — CC follows the matching reference file. Not registered Claude Code slash commands; won't appear in command palette.
+> These are **registered Claude Code skills** (each has its own dir under `~/.claude/skills/co-*`). Appear in `/` command palette and autocomplete. The `/co:*` form (colon) was the old mnemonic — use **`/co-*` (hyphen)** going forward.
 
-| Prompt | Purpose | Load |
-|--------|---------|------|
-| `/co:think` | Pre-task ambiguity resolution (product/technical mode) | `thinking-decision.md` |
-| `/co:plan-review` | CEO-mode Plan critique (EXPAND/SELECTIVE/HOLD/REDUCE) | `thinking-decision.md` |
-| `/co:score` | Score this skill edit on 8 dims, append to `.skill-scores.jsonl` (auto-fire after skill file commits) | `self-correction.md` |
-| `/co:eval` | Session end two-axis score | `self-correction.md` |
-| `/co:review` | Every 5 sessions — scan error log, find promotion candidates | `self-correction.md` |
-| `/co:promote` | Write ≥6-score candidate back into SKILL.md | `self-correction.md` |
-| `/co:loop` | Autonomous cron-driven refinement | `self-correction.md` |
-| `/co:compound` | Capture solution → `docs/solutions/` via 4-subagent pipeline | `knowledge-compounding.md` |
-| `/co:sessions` | Search prior CC/Codex sessions for similar problems | `knowledge-compounding.md` |
+| Command | Purpose | Delegates to |
+|---------|---------|-------------|
+| `/co-think` | Pre-task ambiguity resolution (product/technical mode) | `thinking-decision.md` |
+| `/co-plan-review` | CEO-mode Plan critique (EXPAND/SELECTIVE/HOLD/REDUCE) | `thinking-decision.md` |
+| `/co-score` | Score this skill edit on 8 dims, append to `.skill-scores.jsonl` (auto-fire after skill file commits) | `self-correction.md` |
+| `/co-eval` | Session end two-axis score + reset long-session counters | `self-correction.md` |
+| `/co-review` | Every 5 sessions — scan error log, find promotion candidates | `self-correction.md` |
+| `/co-promote` | Write ≥6-score candidate back into SKILL.md | `self-correction.md` |
+| `/co-loop` | Autonomous cron-driven refinement | `self-correction.md` |
+| `/co-compound` | Capture solution → `docs/solutions/` via 4-subagent pipeline | `knowledge-compounding.md` |
+| `/co-sessions` | Search prior CC/Codex sessions for similar problems | `knowledge-compounding.md` |
+
+**First-time install** (fresh machine clone):
+```bash
+bash ~/.claude/skills/claude-codex-orchestration/sub-skills/install.sh
+```
+Or let Session Start handle it automatically (see below).
 
 ---
 
