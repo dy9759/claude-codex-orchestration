@@ -154,7 +154,14 @@ Claude Code 会：
 三档内联压缩：`lite` / `full` / `ultra`。阶段化上下文阈值（Plan < 20% / 执行 < 60% / 集成 < 80% / Push < 90%）。Compact-guard 保护 5 关键状态。详见 `references/context-budget.md`。
 
 ### 3. 规划与分派
-Phase 0 理解 → Execution Plan 格式化 → 分派（边界清晰 → Codex；前端/架构 → CC；UI 判断 → Gemini）。Codex 调用走 XML 结构化 prompt + thread 持久化 + 置信度门控 Co-Decision。详见 `references/workflow-core.md` + `references/codex-protocol.md`。
+Phase 0 理解 → Execution Plan 格式化 → 分派（边界清晰 → Codex；前端/架构 → CC；UI 判断 → Gemini）。Codex 调用走 XML 结构化 prompt + thread 持久化 + 置信度门控 Co-Decision。
+
+**v2026-04-20 真实数据驱动升级**（来自 MyTeam 11k 行会话）：
+- **PRD-first Phase 0** — 用户 `@<md-file>` 引用的 PRD/设计文档优先完整读完再探索
+- **Branch 保护检测** — Phase 0 step 5 `gh api` 查默认分支 protection，Plan 预先走 feature branch + PR
+- **Three-stage subagent pattern**（superpowers 已装时）— ≥300 行/3+ 文件大任务用 implementer → spec-compliance-reviewer → code-quality-reviewer 三级；<100 行单 dispatch
+
+详见 `references/workflow-core.md` + `references/codex-protocol.md`。
 
 ### 4. 决策集中协议 🔥 v2026-04
 所有用户决策**前置到 Plan 确认** + **末端一次性汇总**。执行中只有 5 类硬阻塞（安全 BLOCKED / 数据丢失 / 越 scope / CRITICAL 颠覆 / 真阻塞）才打断。其他中途决策写入 `.decisions-pending` 队列，应用安全默认，末端汇总一轮回完。
