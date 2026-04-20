@@ -14,6 +14,11 @@
 # Pending escalation queue (not yet uploaded to skill repo) — local-only retry state
 .issue-candidates.jsonl
 
+# Long-session /co:eval pressure counters (per-user, per-machine)
+.last-eval-dispatch-count
+.last-eval-timestamp
+.skip-eval-this-session
+
 # Note: .issue-log.jsonl is TRACKED (evolution record, like .skill-scores.jsonl)
 
 # OS / editor cruft

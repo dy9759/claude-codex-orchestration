@@ -129,6 +129,52 @@ Run after every orchestration session. Two-axis scoring — do NOT pick a number
 
 ---
 
+### Long-Session Auto-Prompt (proactive `/co:eval` trigger)
+
+**Problem observed (MyTeam session 042d4cee, 2026-04-17→19):** 48-hour marathon session with 36 Codex dispatches but only 2 `/co:*` invocations. User accumulated rich experience that was never captured to `.eval-scores.jsonl` because "session end" never cleanly arrived.
+
+**Solution:** CC proactively prompts `/co:eval` when either threshold is hit:
+- Dispatch count since last eval ≥ **10**
+- Time since last eval ≥ **6 hours**
+
+**State files (local, `.gitignored`):**
+- `.last-eval-dispatch-count` — running counter, reset to 0 after each successful `/co:eval`
+- `.last-eval-timestamp` — Unix epoch, reset after each successful `/co:eval`
+
+**Prompt follows Question Format Standard:**
+
+```
+[Orchestration] Pressure threshold reached: 10+ dispatches / 6+ hours since last eval.
+
+Q: Run /co:eval now to capture current learnings?
+
+Options:
+  y.     Run now (recommended — populates .eval-scores.jsonl, enables darwin ratchet)
+  n.     Skip (counters reset, prompt again at next threshold)
+  later. Defer (counters continue accumulating, prompt again in 1 hour)
+  never. Silence for remainder of this session
+
+Recommendation: y (confidence: high)
+  CC: data-less sessions mean Layer 3 /co:review has nothing to scan;
+      your marathon experience is at risk of evaporating.
+  Codex: not consulted (meta-skill decision).
+  Gemini: N/A.
+
+Reply: y / n / later / never
+```
+
+**Answer flow:**
+- `y` → run `/co:eval` → reset both counters
+- `n` → reset counters → silent until next 10/6h threshold
+- `later` → don't reset; re-prompt in 1 hour
+- `never` → write `.skip-eval-this-session` sentinel (removed on next session start)
+
+**Why not just "every 10 dispatches"?** Short bursts of dispatches on a single small task shouldn't be interrupted. The **AND** of count-or-time gives natural marathon detection.
+
+**Compare to Layer 0 /co:score:** Layer 0 fires *after every skill-file commit* (discrete event). This auto-prompt fires *during long work sessions* (pressure-based). They don't overlap.
+
+---
+
 ## Layer 2: Error Auto-Capture
 
 When Codex returns failure, task spec causes confusion, or integration is rejected — immediately log to `.error-log.jsonl`:

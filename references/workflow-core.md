@@ -6,15 +6,34 @@ The full orchestration flow CC runs for any non-trivial task. Load this referenc
 
 ## Phase 0: Understand Before Splitting
 
-1. Explore repo — identify affected modules and files
+1. **Explore context:**
+   - If user referenced a PRD / design doc (e.g. `@path/to/prd.md`, `@path/to/architecture.md`) → **load and read in full first** before touching code
+   - Grep repo for affected modules and files based on PRD requirements
+   - Map: PRD sections → code paths → candidate Plan tasks
+   - If no PRD → explore repo directly from user's spoken intent
 2. Clarify ambiguities (or use Codex Co-Decision — see `codex-protocol.md`)
 3. ID minimum viable change
 4. Determine truly independent (parallelizable) vs. coupled (sequential) tasks
-5. Decide worktrees needed?
+5. **Detect branch protection:**
+   ```bash
+   default_branch=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null)
+   current_branch=$(git branch --show-current 2>/dev/null)
+   if [ "$current_branch" = "$default_branch" ]; then
+     is_protected=$(gh api "repos/{owner}/{repo}/branches/$default_branch" --jq '.protected' 2>/dev/null)
+     [ "$is_protected" = "true" ] && echo "PROTECTED"
+   fi
+   ```
+   - Protected → Plan must use `feature/<agent>-<desc>` branch; Integration ends with `gh pr create`, not direct push
+   - Detection fails (no `gh` / no network) → assume possibly protected; prefer feature branch for any session touching multiple files
+6. Decide worktrees needed?
 
 Only then: produce Execution Plan.
 
 For ambiguous/novel/high-stakes tasks, run `/co:think` first (see `thinking-decision.md`).
+
+**PRD-first precedent** (MyTeam session 042d4cee): user started with `2026-04-17-architecture-diagrams.md` + 4 module PRDs; loading these before exploration avoided wandering and kept Codex specs tight.
+
+**Branch-protection precedent** (MyTeam session 98c45441): attempting `git push origin main` hit a hook block mid-flow. Detecting upfront lets Plan route through PR instead of failing at the final step.
 
 ---
 
@@ -56,6 +75,50 @@ Show plan. Wait for confirm. Then execute. Optional: run `/co:plan-review` for C
 **Practical heuristic:** If the task can be described with `Scope: [paths]` + `Off-limits: [paths]` + a verifiable done-state, **and** it's backend/script/isolated, dispatch to Codex. Frontend and cross-cutting work stays on CC unless there's a specific reason to parallelize.
 
 **Calibration:** This is v0 default. Run 5+ real sessions, then use `.eval-scores.jsonl` weak-point data to adjust per-project (via `/co:review` + `/co:promote`).
+
+---
+
+## Three-Stage Subagent Pattern (superpowers:subagents integration)
+
+When `superpowers@claude-plugins-official` is installed, prefer its **three-stage pattern** for any Codex-owned task with meaningful review needs:
+
+1. **implementer subagent** — writes the code per spec
+2. **spec-compliance-reviewer subagent** — verifies output matches the task spec (scope, deliverables, boundaries)
+3. **code-quality-reviewer subagent** — checks readability, naming, maintainability harness compliance
+
+Replaces a single `codex-rescue` dispatch with three focused dispatches. Observed in real use (MyTeam session 042d4cee) for architecture refactor across Account / Session / Channel / Project modules.
+
+**When to use three-stage:**
+
+| Trigger | Action |
+|---------|--------|
+| Task ≥ 300 lines OR touches 3+ files | Three-stage |
+| Task < 100 lines OR isolated fix | Single dispatch (`codex-rescue`) |
+| Unsure | Three-stage (cost is 3 dispatches; quality ratchet is real) |
+
+**How stages integrate with Codex Co-Decision:**
+- **Stage 1 (implementer)** typically uses Codex via `codex-rescue` with `--write`
+- **Stages 2–3 (reviewers)** are CC subagents (fresh context, read-only) dispatched via built-in `Agent` tool — **not** Codex
+- Reviewers carry `maintainability-harness.md §18 Hard Red Lines` as rejection criteria
+
+**Reviewer briefs (condensed):**
+
+*Spec-compliance reviewer:*
+```
+Task: verify implementation against the original spec.
+Output: list of (spec bullet, passed/failed, evidence).
+Reject on: missed requirements, scope creep beyond declared files, unverified behaviors.
+```
+
+*Code-quality reviewer:*
+```
+Task: review against references/maintainability-harness.md §18 Hard Red Lines.
+Output: list of (red-line, violated-or-not, file:line).
+Reject on: any §18 hard red-line violation.
+```
+
+**Fallback if superpowers not installed:**
+Fold the three stages into one Codex spec via `<verification_loop>` + `<grounding_rules>` with an internal review checklist. Less rigorous (single-agent has blindspots on its own output) but works.
 
 ---
 

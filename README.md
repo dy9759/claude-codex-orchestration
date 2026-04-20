@@ -238,6 +238,8 @@ Phase 0 理解 → Execution Plan 格式化 → 分派（边界清晰 → Codex�
 #### Layer 1 — Session Self-Eval `/co:eval`
 会话结束双轴评分（Ambition × Execution），3×3 锁定矩阵出分 1–5，Devil's Advocate 强制论证，防通胀检测。写 `.eval-scores.jsonl`。
 
+**长会话主动提示（v2026-04-20 从 MyTeam 真实数据学到）：** 默认"会话结束触发"在 48 小时跨度的 marathon 会话里失效（MyTeam 36 dispatch / 2 `/co:*`）。新阈值：**10 dispatch OR 6 小时**未 eval → CC 主动按 Question Format Standard 问是否跑 `/co:eval`。状态文件 `.last-eval-dispatch-count` / `.last-eval-timestamp`。
+
 #### Layer 2 — 错误自动捕获
 Codex 失败 / 集成被拒 / learn-rule 触发 → `.error-log.jsonl` 5 类：dispatch / conflict / integration / scope-creep / token。
 
@@ -310,6 +312,8 @@ Codex 失败 / 集成被拒 / learn-rule 触发 → `.error-log.jsonl` 5 类：d
 | `.tasks/*.json` | 视情况 | 并行任务板（原子认领）|
 | `.issue-candidates.jsonl` | ❌ gitignored | Layer 2.5 待上报队列（`gh` 不可用时的 fallback）|
 | `.issue-log.jsonl` | ✅ 跟踪 | Layer 2.5 已上报 skill 仓库 issue 的历史（跨用户可见）|
+| `.last-eval-dispatch-count` | ❌ gitignored | Layer 1 长会话压力计数（10 dispatch 阈值）|
+| `.last-eval-timestamp` | ❌ gitignored | Layer 1 长会话压力时间（6 小时阈值）|
 
 **重置：** `rm ~/.claude/skills/claude-codex-orchestration/.{eval-scores,error-log,codex-quality}.jsonl` 清除个人会话数据。
 
