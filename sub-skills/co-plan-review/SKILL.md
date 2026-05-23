@@ -5,7 +5,7 @@ description: CEO-mode plan review for claude-codex-orchestration. Run after an E
 
 # /co-plan-review — Strategic Plan Review (CEO-mode)
 
-Full protocol: `~/.claude/skills/claude-codex-orchestration/references/thinking-decision.md` §/co:plan-review.
+Full protocol: `~/.claude/skills/claude-codex-orchestration/references/thinking-decision.md` §/co-plan-review.
 
 ## Quick run
 

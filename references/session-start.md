@@ -104,13 +104,16 @@ agents_bootstrap() {
 - Match project conventions.
 - Make the smallest maintainable change.
 
-### Role Definitions
+### Role Definitions (Runtime-Agnostic)
 
-- **Claude Code** — Tech Lead / Orchestrator + primary executor. Owns architecture, cross-module decisions, integration, frontend work (UI components, pages, interactions, styling), anything needing repo-wide context (migrations, CI/CD, release coordination).
-- **Codex** — Parallel Implementer. Owns bounded backend/script modules with clear boundaries and independent verifiability (isolated features, self-contained scripts, parallel solution attempts, diff review).
-- **Gemini** — Frontend/UI specialist consultant (via `gemini-cli` MCP, optional). Advises on design direction, CSS audits, a11y, multi-file consistency. Never executes — CC always implements and verifies.
+- **Orchestrator** (whoever is runtime — CC or Codex) — Plans, routes tasks by capability matrix, integrates results. The runtime agent is always the orchestrator.
+- **Claude Code** — Architecture, cross-module reasoning, frontend/UI, integration support. Best at repo-wide context tasks.
+- **Codex** — Bounded backend modules, isolated scripts, parallel candidate implementations, code review. Best at isolated, testable tasks.
+- **Gemini** — Frontend/UI specialist consultant (via `gemini-cli` MCP, optional). Advises on design direction, CSS audits, a11y, multi-file consistency. Never executes — orchestrator always implements and verifies.
 
-### Blocked File Patterns (Codex never writes these)
+Task routing follows capability matrix (`runtime-routing.md`), not runtime identity. Same matrix regardless of who orchestrates.
+
+### High-Risk Operations (explicit approval required)
 
 - Database migrations (ALTER/DROP/CREATE TABLE)
 - `.env`, secrets, API keys
@@ -118,6 +121,8 @@ agents_bootstrap() {
 - CI/CD pipelines (.github/workflows/, Dockerfile, Makefile)
 - `rm -rf` / force-delete operations
 - Git history rewrites (rebase -i, reset --hard, push --force)
+
+Do not auto-dispatch these across agents. The current orchestrator keeps ownership, writes a plan with rollback/verify steps, and asks explicit approval before execution.
 
 ### Workflow
 
@@ -188,13 +193,14 @@ agents_bootstrap
 ### Version Constant (bump when §5.2 content changes materially)
 
 ```bash
-CURRENT_CLAUDE_MD_SECTION_VERSION=1
+CURRENT_CLAUDE_MD_SECTION_VERSION=2
 ```
 
 **Bump rule:** Increment this whenever the §5.2 block below gets a new trigger, a changed rule, or a structural edit. Do NOT bump for cosmetic changes. Bump goes in the same commit as the block change.
 
 **Version history:**
-- `v1` (current) — 8 triggers incl. UI style, knowledge compounding, /co:think, /co:plan-review; "invoke the skill to check when in doubt" rule
+- `v1` — 8 triggers incl. UI style, knowledge compounding, /co-think, /co-plan-review; "invoke the skill to check when in doubt" rule
+- `v2` (current) — hyphen `/co-*` command naming, runtime-agnostic routing, Codex AGENTS install/discovery, heartbeat fallback, unified high-risk approval rule
 
 ### Detection + Action Flow
 
@@ -202,7 +208,7 @@ CURRENT_CLAUDE_MD_SECTION_VERSION=1
 seed_global_claude_md() {
   local claude_md=~/.claude/CLAUDE.md
   local sentinel=~/.claude/.orch-claude-md-seeded
-  local current_version=1  # see Version Constant above
+  local current_version=2  # see Version Constant above
 
   # Case A: CLAUDE.md missing entirely or doesn't mention skill → offer to add
   if [ ! -f "$claude_md" ] || ! grep -q "claude-codex-orchestration" "$claude_md" 2>/dev/null; then
@@ -283,7 +289,7 @@ When user answers `y` to add or update, write this block (append for Case A, sur
 
 ```markdown
 
-### 5.2 Prefer `claude-codex-orchestration` Skill <!-- orch-skill-version: 1 -->
+### 5.2 Prefer `claude-codex-orchestration` Skill <!-- orch-skill-version: 2 -->
 
 **When a task matches the `claude-codex-orchestration` skill's triggers, invoke it first.**
 
@@ -291,15 +297,19 @@ Triggers (non-exhaustive):
 - Dual-agent work (Claude Code + Codex + optional Gemini)
 - Parallel implementation of bounded modules
 - Cross-harness setup (Cursor / Codex / OpenCode)
-- Pre-task thinking via `/co:think`
-- Strategic plan review via `/co:plan-review`
+- Runtime-agnostic capability routing (Claude Code or Codex as orchestrator)
+- Codex project install via `.codex/orchestration/` + AGENTS managed block
+- Cross-agent dispatch with heartbeat monitoring and portable timeout fallback
+- Pre-task thinking via `/co-think`
+- Strategic plan review via `/co-plan-review`
 - Engineering principles enforcement (Hyrum, Beyoncé, Chesterton, trunk-based, shift-left, feature flags, deprecation, maintainability harness)
 - UI style standard (shadcn/radix-nova)
-- Knowledge compounding (`/co:compound`, `/co:sessions`)
+- Knowledge compounding (`/co-compound`, `/co-sessions`)
 
 Rule:
 - If the current work plausibly matches any trigger above, invoke the `claude-codex-orchestration` skill **before** doing other work.
-- Do not re-invent its workflows ad hoc. Prefer its `/co:*` invocation prompts and subagent-dispatch patterns.
+- Do not re-invent its workflows ad hoc. Prefer its `/co-*` invocation prompts and subagent-dispatch patterns.
+- High-risk work (DB/env/secrets/package manifests/CI/release/destructive ops) is never auto-dispatched; current orchestrator asks explicit approval first.
 - If in doubt whether a task qualifies, invoke the skill to check — cheap to load, expensive to skip.
 ```
 
@@ -567,14 +577,67 @@ See `references/self-correction.md` §Layer 2.5 for fingerprint format, dedup lo
 
 ---
 
+## Part 7: Runtime Detection & Routing Setup
+
+**Intent:** Detect which runtime is active and which agents are available for dispatch. Runs once at session start, results cached for session duration. Informs Plan format labels (`[Self]` vs `[Dispatch:CC]` vs `[Dispatch:Codex]`).
+
+```bash
+runtime_routing_setup() {
+  local harness available
+
+  # 1. Detect current runtime (from cross-harness.md)
+  harness="$(detect_harness)"
+
+  # 2. Detect available agents (from cross-harness.md)
+  available="$(detect_available_agents)"
+
+  # 3. Announce
+  echo "[Orchestration] Runtime: $harness | Available agents: $available"
+  echo "  Task routing via capability matrix (references/runtime-routing.md)"
+
+  # 4. Cache for session
+  export ORCH_RUNTIME="$harness"
+  export ORCH_AVAILABLE_AGENTS="$available"
+
+  # 5. Runtime-specific notes
+  case "$harness" in
+    codex)
+      echo "  Codex runtime: dispatching to CC via 'claude -p' for repo-wide tasks"
+      echo "  Sub-skills with CC dependency: co-compound (sequential), co-sessions (shell), co-loop (single-exec)"
+      ;;
+    claude-code)
+      echo "  CC runtime: dispatching to Codex via codex:codex-rescue for bounded tasks"
+      ;;
+    *)
+      echo "  Unknown runtime: all tasks execute locally (no cross-agent dispatch)"
+      ;;
+  esac
+}
+
+runtime_routing_setup
+```
+
+**Order in Session Start sequence:**
+1. Plugin Detection
+2. AGENTS.md Bootstrap
+3. Global CLAUDE.md §5.2 Auto-Seed
+4. Skill Self-Update Check
+5. Escalation Queue Flush
+6. Sub-skill Install Check
+7. **Runtime Detection & Routing Setup** ← new
+
+Part 7 runs after Part 6 because sub-skills must be installed before we can assess which are runtime-compatible.
+
+---
+
 ## Data File Lifecycle (informational)
 
 Per-user session state — auto-created on first use, `.gitignore`d, never committed.
 
 | File | Written by | Read by | Purpose |
 |------|-----------|---------|---------|
-| `.eval-scores.jsonl` | `/co:eval` at session end | `/co:review`, Smart Tool RAG quality filter | Two-axis score history, anti-inflation detection |
-| `.error-log.jsonl` | Codex failure / integration rejection / Learn-Rule fast path | `/co:review`, Smart Tool RAG quality filter | Error capture, recurrence detection for Layer 3 promotion |
+| `.eval-scores.jsonl` | `/co-eval` at session end | `/co-review`, Smart Tool RAG quality filter | Two-axis score history, anti-inflation detection |
+| `.error-log.jsonl` | Codex failure / integration rejection / Learn-Rule fast path | `/co-review`, Smart Tool RAG quality filter | Error capture, recurrence detection for Layer 3 promotion |
 | `.codex-quality.jsonl` | Every Codex dispatch result | Quality tracking (rolling 20-window), auto-evolve trigger | Dispatch success rate, penalty factor, hard-stop gate |
 | `.decisions-approved` | Pre-flight Decision Batching | Mid-execution (skip re-asking) | Plan-cycle approvals, cleared at Plan completion |
 | `.decisions-pending` | Mid-execution queue | End-of-Plan Consolidated Review | Queued decisions for batch resolution |

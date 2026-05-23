@@ -21,12 +21,20 @@ Only 5 files survive compaction. Before calling `/compact`, save these 5:
 4. Decisions made this session
 5. Next step immediately post-compact
 
-## Identity Re-Injection
+## Identity Re-Injection (Runtime-Aware)
 
-After compaction resumes, CC must reinject:
-> "You are Claude Code acting as Tech Lead for [project]. Current task: [task]. Codex is handling: [scope]. Next: [step]."
+After compaction resumes, orchestrator must reinject identity with runtime context:
 
-Without re-injection, CC loses orchestration context and may duplicate Codex work.
+**CC as runtime:**
+> "You are Claude Code acting as orchestrator for [project]. Current task: [task]. Codex is handling: [scope]. Available agents: [list]. Next: [step]."
+
+**Codex as runtime:**
+> "You are Codex acting as orchestrator for [project]. Current task: [task]. CC is handling: [scope]. Available agents: [list]. Next: [step]."
+
+**Generic template:**
+> "You are [RUNTIME] acting as orchestrator for [project]. Current task: [task]. [DISPATCH_AGENT] is handling: [scope]. Routing by capability matrix. Next: [step]."
+
+Without re-injection, orchestrator loses context and may duplicate dispatched agent's work or mis-route tasks.
 
 ## Token Accounting
 

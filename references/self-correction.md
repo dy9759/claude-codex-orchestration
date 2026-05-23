@@ -4,7 +4,7 @@ Four-layer mechanism: **score skill edits → evaluate sessions → capture erro
 
 ---
 
-## Layer 0: Skill Modification Score (`/co:score`) — auto-fire after every skill edit
+## Layer 0: Skill Modification Score (`/co-score`) — auto-fire after every skill edit
 
 **Trigger:** Any commit that modifies `SKILL.md`, `references/*.md`, `README.md`, `CLAUDE.md.template`, or the AGENTS.md template inside `references/session-start.md`. (README.md included because it directly affects the Documentation Quality and Usability dimensions.)
 
@@ -93,7 +93,7 @@ readme_sync_check() {
 
 ---
 
-## Layer 1: Session Self-Eval (`/co:eval`)
+## Layer 1: Session Self-Eval (`/co-eval`)
 
 Run after every orchestration session. Two-axis scoring — do NOT pick a number first.
 
@@ -129,24 +129,24 @@ Run after every orchestration session. Two-axis scoring — do NOT pick a number
 
 ---
 
-### Long-Session Auto-Prompt (proactive `/co:eval` trigger)
+### Long-Session Auto-Prompt (proactive `/co-eval` trigger)
 
 **Problem observed (MyTeam session 042d4cee, 2026-04-17→19):** 48-hour marathon session with 36 Codex dispatches but only 2 `/co:*` invocations. User accumulated rich experience that was never captured to `.eval-scores.jsonl` because "session end" never cleanly arrived.
 
-**Solution:** CC proactively prompts `/co:eval` when either threshold is hit:
+**Solution:** CC proactively prompts `/co-eval` when either threshold is hit:
 - Dispatch count since last eval ≥ **10**
 - Time since last eval ≥ **6 hours**
 
 **State files (local, `.gitignored`):**
-- `.last-eval-dispatch-count` — running counter, reset to 0 after each successful `/co:eval`
-- `.last-eval-timestamp` — Unix epoch, reset after each successful `/co:eval`
+- `.last-eval-dispatch-count` — running counter, reset to 0 after each successful `/co-eval`
+- `.last-eval-timestamp` — Unix epoch, reset after each successful `/co-eval`
 
 **Prompt follows Question Format Standard:**
 
 ```
 [Orchestration] Pressure threshold reached: 10+ dispatches / 6+ hours since last eval.
 
-Q: Run /co:eval now to capture current learnings?
+Q: Run /co-eval now to capture current learnings?
 
 Options:
   y.     Run now (recommended — populates .eval-scores.jsonl, enables darwin ratchet)
@@ -155,7 +155,7 @@ Options:
   never. Silence for remainder of this session
 
 Recommendation: y (confidence: high)
-  CC: data-less sessions mean Layer 3 /co:review has nothing to scan;
+  CC: data-less sessions mean Layer 3 /co-review has nothing to scan;
       your marathon experience is at risk of evaporating.
   Codex: not consulted (meta-skill decision).
   Gemini: N/A.
@@ -164,14 +164,14 @@ Reply: y / n / later / never
 ```
 
 **Answer flow:**
-- `y` → run `/co:eval` → reset both counters
+- `y` → run `/co-eval` → reset both counters
 - `n` → reset counters → silent until next 10/6h threshold
 - `later` → don't reset; re-prompt in 1 hour
 - `never` → write `.skip-eval-this-session` sentinel (removed on next session start)
 
 **Why not just "every 10 dispatches"?** Short bursts of dispatches on a single small task shouldn't be interrupted. The **AND** of count-or-time gives natural marathon detection.
 
-**Compare to Layer 0 /co:score:** Layer 0 fires *after every skill-file commit* (discrete event). This auto-prompt fires *during long work sessions* (pressure-based). They don't overlap.
+**Compare to Layer 0 /co-score:** Layer 0 fires *after every skill-file commit* (discrete event). This auto-prompt fires *during long work sessions* (pressure-based). They don't overlap.
 
 ---
 
@@ -206,7 +206,7 @@ When Codex returns failure, task spec causes confusion, or integration is reject
 |----------|-----------|-------------|-------------------|
 | **Recurrent root cause** | Same `root_cause` or `weak_point` ≥ 2× in last 7 sessions | `.eval-scores.jsonl` + `.error-log.jsonl` | `darwin:<category>:<root_cause>` |
 | **Codex quality hard-stop** | Rolling-20 success rate < 40% OR ≥ 3 consecutive failures | `.codex-quality.jsonl` | `quality:hard-stop:<category>` |
-| **Darwin regression** | `/co:promote`-added rule failed to improve target dimension in next same-dim session | `.skill-scores.jsonl` + `.eval-scores.jsonl` | `darwin:regression:<dim>` |
+| **Darwin regression** | `/co-promote`-added rule failed to improve target dimension in next same-dim session | `.skill-scores.jsonl` + `.eval-scores.jsonl` | `darwin:regression:<dim>` |
 | **Structural flaw** | Same `weak_point` persists 5+ consecutive sessions | `.eval-scores.jsonl` | `structural:<weak_point>` |
 
 ### Local-only (never escalate)
@@ -288,8 +288,8 @@ Labels like `auto-report`, `darwin`, `quality` MAY be added if they exist in tar
 <1–2 sentences: what aspect of the skill may need adjustment>
 
 ## Proposed Action
-- [ ] Investigate via `/co:review` at next scheduled checkpoint
-- [ ] Candidate for `/co:promote` if Durability+Impact+Scope total ≥ 6
+- [ ] Investigate via `/co-review` at next scheduled checkpoint
+- [ ] Candidate for `/co-promote` if Durability+Impact+Scope total ≥ 6
 - [ ] Consider strategy escalation (micro-fix → section rewrite → radical restructure)
 - [ ] User judgment needed on whether this is skill-level or host-project-level
 
@@ -329,20 +329,20 @@ Both files git-tracked (like `.skill-scores.jsonl`) — future users see what pr
 - **Opt-out**: `~/.claude/.orch-escalation-disabled` sentinel disables external escalation entirely (local capture still runs).
 - **Does NOT use Question Format Standard** — this is a background channel, not a user interaction. See `decision-protocol.md` note.
 
-### Compare to /co:review + /co:promote
+### Compare to /co-review + /co-promote
 
 Layer 2.5 is upstream of promotion:
 - **Layer 2 (Error Auto-Capture)** — records each failure locally
 - **Layer 2.5 (External Escalation)** — when threshold hit, reports to skill repo for community awareness
-- **Layer 3 (`/co:review`, `/co:promote`)** — periodic scan, may resolve some escalated issues by promoting fixes
+- **Layer 3 (`/co-review`, `/co-promote`)** — periodic scan, may resolve some escalated issues by promoting fixes
 
-After `/co:promote` writes a new rule into SKILL.md, the corresponding `.issue-candidates.jsonl` entries and matching open issues should be auto-closed with a comment: `"Addressed in <commit>. See SKILL.md §<section>."`
+After `/co-promote` writes a new rule into SKILL.md, the corresponding `.issue-candidates.jsonl` entries and matching open issues should be auto-closed with a comment: `"Addressed in <commit>. See SKILL.md §<section>."`
 
 ---
 
-## Layer 3: Review & Promote (`/co:review`, `/co:promote`)
+## Layer 3: Review & Promote (`/co-review`, `/co-promote`)
 
-**`/co:review`** — run every 5 sessions or when `.eval-scores.jsonl` has 5+ entries:
+**`/co-review`** — run every 5 sessions or when `.eval-scores.jsonl` has 5+ entries:
 
 1. Read `.eval-scores.jsonl` + `.error-log.jsonl`
 2. Find recurring `weak_point` or `root_cause` (appears 2+ times)
@@ -357,7 +357,7 @@ After `/co:promote` writes a new rule into SKILL.md, the corresponding `.issue-c
 
 **Promote if total ≥ 6.** Watch at 4-5. Ignore ≤ 3.
 
-**`/co:promote`** — distill and write the improvement into SKILL.md:
+**`/co-promote`** — distill and write the improvement into SKILL.md:
 
 Distillation rules (from descriptive to prescriptive):
 - ❌ "Codex kept asking about scope because the spec wasn't tight enough"
@@ -384,8 +384,8 @@ After promoting: remove the source entries from `.error-log.jsonl` to prevent st
 | 15+ | Flag to user: this skill may have a structural design flaw |
 
 **Autonomous cron loop** — for background skill refinement (while user is away):
-1. CC runs `/co:eval` + `/co:review`
-2. If promotion candidate found (score ≥ 6): run `/co:promote`, git commit
+1. CC runs `/co-eval` + `/co-review`
+2. If promotion candidate found (score ≥ 6): run `/co-promote`, git commit
 3. Schedule next cycle via `ScheduleWakeup` (270s — stays within cache TTL)
 4. Repeat until: no candidates found, or user interrupts
 5. Never stop asking to continue — run indefinitely until manually interrupted

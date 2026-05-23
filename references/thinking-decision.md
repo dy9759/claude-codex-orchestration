@@ -4,7 +4,7 @@ Two structured thinking modes before acting on complex tasks. Run these **before
 
 ---
 
-## `/co:think` — Pre-Task Thinking (office-hours style)
+## `/co-think` — Pre-Task Thinking (office-hours style)
 
 Two modes — detect from context or ask:
 
@@ -40,7 +40,7 @@ If yes → dispatch via Codex Co-Decision Protocol with assembled context. Repor
 
 ---
 
-## `/co:plan-review` — Strategic Plan Review (CEO review style)
+## `/co-plan-review` — Strategic Plan Review (CEO review style)
 
 Run after an Execution Plan is drafted. Ask user to choose mode first:
 

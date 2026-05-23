@@ -8,7 +8,7 @@
 
 | Type | When | Examples |
 |------|------|----------|
-| **Pre-flight** (asked during Plan confirmation) | BEFORE execution starts | Plan approval, `/co:plan-review` mode, anticipated high-risk ops, UI theme changes, planned deletions |
+| **Pre-flight** (asked during Plan confirmation) | BEFORE execution starts | Plan approval, `/co-plan-review` mode, anticipated high-risk ops, UI theme changes, planned deletions |
 | **Queued** (logged, auto-defaulted, asked at end) | Mid-execution, **not** blocking | Codex review findings, Gemini-vs-browser conflicts, non-obvious Chesterton's Fence calls, UI webpage-extraction apply |
 | **Blocking** (interrupt immediately, rare) | Anytime | Dispatch Security Gate BLOCKED patterns, destructive ops without backup, cross-scope writes, data loss risk |
 | **End-of-plan** (single consolidated prompt) | After Priority 1–3 all done | Open `todo` issues + queued decisions + milestone menu |
@@ -254,8 +254,8 @@ Querying Codex/Gemini has round-trip cost. Rule:
 | Chesterton's Fence (code unclear) | yes (impact analysis) | no |
 | UI theme/variant selection | no | yes |
 | Simple bootstrap y/n (CLAUDE.md, plugin, etc.) | no | no |
-| Mode selection (`/co:plan-review` EXPAND/HOLD/...) | on scope expansion risk | no |
-| `/co:compound` Full vs Lightweight | no | no (CC has full context) |
+| Mode selection (`/co-plan-review` EXPAND/HOLD/...) | on scope expansion risk | no |
+| `/co-compound` Full vs Lightweight | no | no (CC has full context) |
 | Codex Co-Decision escalation | already consulted | sometimes (on UI edge cases) |
 
 ### Examples

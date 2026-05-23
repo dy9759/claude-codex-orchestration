@@ -5,7 +5,7 @@ description: Pre-task thinking for claude-codex-orchestration (office-hours styl
 
 # /co-think — Pre-Task Thinking
 
-Full protocol: `~/.claude/skills/claude-codex-orchestration/references/thinking-decision.md` §/co:think.
+Full protocol: `~/.claude/skills/claude-codex-orchestration/references/thinking-decision.md` §/co-think.
 
 ## Quick run
 

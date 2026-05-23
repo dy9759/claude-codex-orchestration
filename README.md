@@ -1,34 +1,42 @@
 # claude-codex-orchestration
 
-> Claude Code 作为 **Tech Lead + 主执行者**，Codex 作为**并行实现者**（边界清晰的后端/脚本模块），Gemini 作为**前端/UI 专项咨询**（可选，via gemini-cli MCP）。自持运行（无强制外部插件依赖），跨 4 种 harness 可用（Claude Code / Cursor / Codex / OpenCode），带 4 层自我纠错 + 知识复利机制。
+> **Runtime-agnostic 编排框架。** 谁是 runtime 谁做 orchestrator，任务分配永远按能力矩阵路由。CC 和 Codex 作为对称 orchestrator — runtime agent 派遣任务给另一方。Gemini 作为**前端/UI 专项咨询**（可选，via gemini-cli MCP）。自持运行（无强制外部插件依赖），跨 4 种 harness 可用（Claude Code / Cursor / Codex / OpenCode），带心跳监控 + fallback 机制 + 4 层自我纠错 + 知识复利机制。
 
 ---
 
-## 三角色模型
+## Runtime-Agnostic 模型（v7 升级）
 
 ```
-Claude Code（Tech Lead + 主执行者）
+Orchestrator（谁是 runtime 谁做 orchestrator）
     │
-    ├─ 架构设计、跨模块决策、仓库探索
-    ├─ 前端工作（UI、页面、交互、样式、设计系统）
-    ├─ 迁移、CI/CD、发布协调
-    ├─ 最终集成、回归测试
+    ├─ 规划、能力矩阵路由、集成结果
+    ├─ 心跳监控 dispatched 任务
     │
-    ├─▶ Codex（并行实现者）
+    ├─▶ Claude Code（能力：repo-wide 推理）
+    │       ├─ 架构设计、跨模块决策
+    │       ├─ 前端（UI、页面、交互、样式）
+    │       ├─ 迁移、CI/CD、发布协调
+    │       └─ 最终集成、回归测试
+    │
+    ├─▶ Codex（能力：隔离可测试模块）
     │       ├─ 边界清晰的后端模块 / 脚本
+    │       ├─ bug 修复 / 既有项目细节改动（范围清晰时首选）
     │       ├─ 独立可验证的 feature
     │       ├─ 并行方案试解
     │       └─ 当前 diff review（只读）
     │
-    └─▶ Gemini（前端/UI 专项咨询，可选）
+    └─▶ Gemini（能力：UI/设计判断，可选）
             ├─ 大型 UI 改版方案发散
-            ├─ 2–3 个视觉/交互方向
             ├─ CSS 架构 / a11y / 响应式审查
-            ├─ 多文件 UI 一致性扫描
             └─ "不丑但不够好"第二意见
-            * via mcp__gemini-cli__*，不走 API key
-            * CC 永远负责实现和浏览器验证
+            * via mcp__gemini-cli__*（CC 中转）
+            * orchestrator 永远负责实现
 ```
+
+**对称调度：**
+- CC runtime → dispatch to Codex via `codex:codex-rescue`
+- Codex runtime → dispatch to CC via `claude -p --output-format json`
+- 能力矩阵决定谁做什么，不看谁是 runtime
 
 **铁律：** 任何时候不允许两个 Agent 同时写同一个文件。
 
@@ -39,7 +47,7 @@ Claude Code（Tech Lead + 主执行者）
 ```
 Layer 1 — CLAUDE.md           全局最小规则，每机可不同        (~20 行)
 Layer 2 — SKILL.md            跨机一致的 router + 自持规则    (~83 行)
-Layer 3 — references/*.md     深度内容，按需懒加载            (13 files)
+Layer 3 — references/*.md     深度内容，按需懒加载            (16 files)
 Layer 4 — 项目 AGENTS.md      bootstrap 生成，项目特有        (~50 行)
 ```
 
@@ -49,7 +57,7 @@ Layer 4 — 项目 AGENTS.md      bootstrap 生成，项目特有        (~50 �
 - 深度内容只在 CC 真需要时加载 → 上下文节省 ~9k tokens/次
 
 **v2026-04 重构关键数据：**
-- SKILL.md: 665 → 83 行（-87%）
+- SKILL.md: 665 → ~100 行（仍保持 thin router）
 - 按需加载平均每次 1–2 个 references（~1.5k–3k tokens）
 - 净节省：典型会话 **~7k–9k tokens**
 
@@ -81,14 +89,17 @@ SKILL.md 里的路由表，CC 根据任务匹配读哪个 reference：
 | 决策协议（前置 + 末端 + Priority 1–4）| `references/decision-protocol.md` | Plan 有多个决策点 |
 | Codex 完整协议（调用 + co-decision + 安全门 + 质量追踪）| `references/codex-protocol.md` | Codex 派发前 |
 | Gemini 集成（何时咨询 + 路由 + hook 配置）| `references/gemini-integration.md` | 前端/UI 可能需设计输入 |
-| 思考层（`/co:think` + `/co:plan-review`）| `references/thinking-decision.md` | 任务模糊/新颖 |
-| 知识复利（`/co:compound` + `/co:sessions`）| `references/knowledge-compounding.md` | 解决非平凡问题后 |
+| 思考层（`/co-think` + `/co-plan-review`）| `references/thinking-decision.md` | 任务模糊/新颖 |
+| 知识复利（`/co-compound` + `/co-sessions`）| `references/knowledge-compounding.md` | 解决非平凡问题后 |
 | 自我纠错（Layer 0–3）| `references/self-correction.md` | 会话结束 / skill 编辑 |
 | 跨 harness 配置 | `references/cross-harness.md` | Harness 迁移 |
 | 工程原则（Hyrum/Beyoncé/Chesterton 等）| `references/engineering-principles.md` | 集成审查 |
 | 维护性规范（20 节 + Hard Red Lines）| `references/maintainability-harness.md` | 每次 Codex 派发 / AGENTS.md seed |
 | UI 样式规范（shadcn + radix-nova）| `references/ui-style-standard.md` | 任何前端任务 |
 | 上下文预算（+ Smart Tool RAG）| `references/context-budget.md` | 上下文 > 60% 或卡住 |
+| 能力矩阵路由（runtime-agnostic 任务分配）| `references/runtime-routing.md` | 任何 task dispatch（v7）|
+| 心跳协议（3 级检测 + fallback 状态机）| `references/heartbeat-protocol.md` | 跨 agent dispatch 时（v7）|
+| Codex 主 runtime 协议（CC dispatch + sub-skill 兼容）| `references/codex-runtime.md` | Codex 作为 orchestrator 时（v7）|
 
 ---
 
@@ -103,9 +114,15 @@ git clone https://github.com/dy9759/claude-codex-orchestration \
 
 **跨机部署：** 复制 `CLAUDE.md.template`（仓库根，20 行）到 `~/.claude/CLAUDE.md`，触发 `§Preferred skill` 规则自动调用本 skill。其他机器用户无需手动复制全部规则。
 
-**必需：**
+**Codex 作为 orchestrator：** 运行 `bash sub-skills/install-codex.sh [project-root]`。脚本会把 `SKILL.md`、全部 references、`/co-*` 等价命令说明和 portable timeout wrapper 复制到 `.codex/orchestration/`，并在项目 `AGENTS.md` 写入 managed block，让 Codex 能自动发现本 skill。
+
+**Claude Code runtime 必需：**
 - Claude Code CLI
 - `codex@openai-codex` plugin（Codex 调度底层）
+
+**Codex runtime 必需：**
+- Codex CLI / Codex Desktop
+- 若要从 Codex 派发给 Claude Code：`claude` CLI 已安装并登录
 
 **可选增强（skill 自带内联 fallback，未装不影响使用）：**
 
@@ -129,7 +146,7 @@ git clone https://github.com/dy9759/claude-codex-orchestration \
 或对复杂任务先前置思考：
 
 ```
-先跑 /co:think 再规划
+先跑 /co-think 再规划
 ```
 
 Claude Code 会：
@@ -153,8 +170,15 @@ Claude Code 会：
 ### 2. Token 预算
 三档内联压缩：`lite` / `full` / `ultra`。阶段化上下文阈值（Plan < 20% / 执行 < 60% / 集成 < 80% / Push < 90%）。Compact-guard 保护 5 关键状态。详见 `references/context-budget.md`。
 
-### 3. 规划与分派
-Phase 0 理解 → Execution Plan 格式化 → 分派（边界清晰 → Codex；前端/架构 → CC；UI 判断 → Gemini）。Codex 调用走 XML 结构化 prompt + thread 持久化 + 置信度门控 Co-Decision。
+### 3. 规划与分派（v7 能力路由升级）
+Phase 0 理解 → Runtime 检测 + 可用 agent 探测 → Execution Plan 格式化（`[Self]`/`[Dispatch:CC]`/`[Dispatch:Codex]` 标签）→ 能力矩阵路由分派。
+
+**v7 核心变更：**
+- Plan 标签从 `[CC]`/`[Codex]` 改为 runtime-agnostic `[Self]`/`[Dispatch:*]`
+- 能力矩阵统一决定谁做什么：架构/前端 → CC；隔离模块/脚本/bug 修复/既有项目细节改动 → Codex；UI 设计 → Gemini
+- 同一 Plan 从 CC 或 Codex runtime 都能执行，标签由路由算法解析
+- Codex → CC 调用通过 `claude -p --output-format json --max-budget-usd N`
+- 心跳监控：background dispatch 自动启用三级检测（进程存活 / 进度 / 语义）+ STALLED/DEAD/TIMEOUT fallback
 
 **v2026-04-20 真实数据驱动升级**（来自 MyTeam 11k 行会话）：
 - **PRD-first Phase 0** — 用户 `@<md-file>` 引用的 PRD/设计文档优先完整读完再探索
@@ -186,8 +210,8 @@ Phase 0 理解 → Execution Plan 格式化 → 分派（边界清晰 → Codex�
 详见 `references/codex-protocol.md` + `references/workflow-core.md`。
 
 ### 6. 思考与决策
-- `/co:think` — 产品/技术双模式前置思考（5/4 问一问一答 + Premise Challenge + 可选 Codex cold read）
-- `/co:plan-review` — CEO 级 Plan 审核（EXPAND/SELECTIVE/HOLD/REDUCE 四模式 + 7 条 Prime Directives）
+- `/co-think` — 产品/技术双模式前置思考（5/4 问一问一答 + Premise Challenge + 可选 Codex cold read）
+- `/co-plan-review` — CEO 级 Plan 审核（EXPAND/SELECTIVE/HOLD/REDUCE 四模式 + 7 条 Prime Directives）
 
 详见 `references/thinking-decision.md`。
 
@@ -242,10 +266,10 @@ Phase 0 理解 → Execution Plan 格式化 → 分派（边界清晰 → Codex�
 
 **当前分数：83.2/100**（`c2b8283`，从 baseline 72.0 爬到 83.2 共 5 次正向修改）。
 
-#### Layer 1 — Session Self-Eval `/co:eval`
+#### Layer 1 — Session Self-Eval `/co-eval`
 会话结束双轴评分（Ambition × Execution），3×3 锁定矩阵出分 1–5，Devil's Advocate 强制论证，防通胀检测。写 `.eval-scores.jsonl`。
 
-**长会话主动提示（v2026-04-20 从 MyTeam 真实数据学到）：** 默认"会话结束触发"在 48 小时跨度的 marathon 会话里失效（MyTeam 36 dispatch / 2 `/co:*`）。新阈值：**10 dispatch OR 6 小时**未 eval → CC 主动按 Question Format Standard 问是否跑 `/co:eval`。状态文件 `.last-eval-dispatch-count` / `.last-eval-timestamp`。
+**长会话主动提示（v2026-04-20 从 MyTeam 真实数据学到）：** 默认"会话结束触发"在 48 小时跨度的 marathon 会话里失效（MyTeam 36 dispatch / 2 `/co:*`）。新阈值：**10 dispatch OR 6 小时**未 eval → CC 主动按 Question Format Standard 问是否跑 `/co-eval`。状态文件 `.last-eval-dispatch-count` / `.last-eval-timestamp`。
 
 #### Layer 2 — 错误自动捕获
 Codex 失败 / 集成被拒 / learn-rule 触发 → `.error-log.jsonl` 5 类：dispatch / conflict / integration / scope-creep / token。
@@ -259,7 +283,7 @@ Codex 失败 / 集成被拒 / learn-rule 触发 → `.error-log.jsonl` 5 类：d
 |------|------|------------|
 | Recurrent root cause | 同 `root_cause` ≥ 2 次 / 7 会话 | `darwin:<category>:<root_cause>` |
 | Codex quality hard-stop | 滚动 20 次成功率 < 40% 或连续 ≥ 3 失败 | `quality:hard-stop:<category>` |
-| Darwin regression | `/co:promote` 添加的规则下次同维度未改善 | `darwin:regression:<dim>` |
+| Darwin regression | `/co-promote` 添加的规则下次同维度未改善 | `darwin:regression:<dim>` |
 | Structural flaw | 同 `weak_point` 持续 ≥ 5 会话 | `structural:<weak_point>` |
 
 **Dedup：** 按 fingerprint 查已有 open issue → 存在则 comment 追加，不存在则 `gh issue create`。
@@ -277,12 +301,12 @@ Codex 失败 / 集成被拒 / learn-rule 触发 → `.error-log.jsonl` 5 类：d
 
 **Opt-out：** `touch ~/.claude/.orch-escalation-disabled`（本地捕获继续，只停外部上报）。
 
-#### Layer 3 — 审查 + 晋升 `/co:review` + `/co:promote`
+#### Layer 3 — 审查 + 晋升 `/co-review` + `/co-promote`
 每 5 会话找 2+ 次重复弱点 → Durability+Impact+Scope 打分 ≥ 6 → 晋升到 SKILL.md。Ratchet 规则 + 简洁性原则。
 
-#### 知识复利 `/co:compound` + `/co:sessions`
-`/co:compound` 4 子 agent 并行（Context / Solution / Related Docs / Session Historian）→ 写 `docs/solutions/[category]/[slug]-[date].md`。
-`/co:sessions` 跨会话搜（`~/.claude/projects/` + `~/.codex/sessions/`）避免重复失败路径。
+#### 知识复利 `/co-compound` + `/co-sessions`
+`/co-compound` 4 子 agent 并行（Context / Solution / Related Docs / Session Historian）→ 写 `docs/solutions/[category]/[slug]-[date].md`。
+`/co-sessions` 跨会话搜（`~/.claude/projects/` + `~/.codex/sessions/`）避免重复失败路径。
 
 详见 `references/self-correction.md` + `references/knowledge-compounding.md`。
 
@@ -290,7 +314,7 @@ Codex 失败 / 集成被拒 / learn-rule 触发 → `.error-log.jsonl` 5 类：d
 
 ## Invocation Commands（已注册 slash command — 用 `/co-*` hyphen 形式）🔥 v2026-04-20
 
-> **升级：** 从观测失败 `"Unknown command: /co:eval"` 中学习—旧冒号形式只是文档里的记忆 prompt，现在把 9 个全部注册为真实 Claude Code 子 skill。**用 hyphen `/co-*`，会出现在 `/` 补全里。**
+> **升级：** 从观测失败 `"Unknown command: /co-eval"` 中学习—旧冒号形式只是文档里的记忆 prompt，现在把 9 个全部注册为真实 Claude Code 子 skill。**用 hyphen `/co-*`，会出现在 `/` 补全里。**
 
 | 命令 | 用途 | 加载 |
 |------|------|------|
@@ -308,6 +332,8 @@ Codex 失败 / 集成被拒 / learn-rule 触发 → `.error-log.jsonl` 5 类：d
 ```bash
 bash ~/.claude/skills/claude-codex-orchestration/sub-skills/install.sh
 ```
+
+**Codex 等价触发：** Codex 不注册 slash command。运行 `sub-skills/install-codex.sh` 后，项目 `AGENTS.md` 会把 `/co-think`、`/co-plan-review`、`/co-score` 等 token 映射到 `.codex/orchestration/commands/*.md`。在 Codex 里输入这些 token 时，按自然语言 workflow 执行。
 
 ---
 
@@ -445,10 +471,12 @@ Skill 本身是 git 仓库（clone 自 `dy9759/claude-codex-orchestration`）。
 |------|---------|:---:|
 | v0 (`bb10408`, 重构前) | 单体 SKILL.md 902 行 | 72.0 |
 | v1 (`f01002b`, thin-router) | SKILL.md 瘦到 81 行 + 3 新 references + CLAUDE.md.template | **78.6** |
-| v2 (`def4a9e`, Layer 0) | 加入 `/co:score` 自动打分机制 | **80.0** |
+| v2 (`def4a9e`, Layer 0) | 加入 `/co-score` 自动打分机制 | **80.0** |
 | v3 (`f899c1c`, README 重写) | README 全量同步 thin-router 架构 + Layer 0 trigger 扩展到 README | **81.2** |
 | v4 (`a8090ac`, §5.2 auto-seed) | 全局 CLAUDE.md §5.2 自动播种（手动调用检测）| **82.4** |
 | v5 (`c2b8283`, §5.2 版本化) | §5.2 版本感知 + surgical replacement + 时间戳备份 | **83.2** |
+| v7 (runtime-agnostic + heartbeat) | 能力矩阵路由 + 心跳监控 + Codex-as-orchestrator + fallback 机制 | **91.1** |
+| v8 (Codex runtime hardening) | Codex Desktop 检测 + AGENTS managed block + `/co-*` Codex 等价触发 + portable timeout + 高风险策略统一 | **86.1** |
 
 查看实时分数：`cat .skill-scores.jsonl`。
 

@@ -12,8 +12,8 @@ Full protocol: `~/.claude/skills/claude-codex-orchestration/references/self-corr
 1. Run `/co-eval` on last session
 2. Run `/co-review` to find promote candidates
 3. If candidate ≥ 6 → `/co-promote` → `git commit` (triggers Layer 0 score)
-4. `ScheduleWakeup(270s, "continue /co-loop", "autonomous refinement")`
-5. Repeat until user interrupts
+4. **CC runtime:** `ScheduleWakeup(270s, "continue /co-loop", "autonomous refinement")` → repeat until user interrupts
+5. **Codex runtime (no ScheduleWakeup):** Single execution only. Log: `"[co-loop] Single execution complete. Re-run manually for next cycle."` No auto-scheduling — user must re-invoke.
 
 ## Strategy escalation (same weak point ≥ N sessions)
 

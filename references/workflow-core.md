@@ -6,6 +6,13 @@ The full orchestration flow CC runs for any non-trivial task. Load this referenc
 
 ## Phase 0: Understand Before Splitting
 
+0. **Runtime detection & agent availability:**
+   - Run `detect_harness()` from `cross-harness.md` → identify runtime (CC / Codex / Cursor / OpenCode)
+   - Run `detect_available_agents()` → identify dispatchable agents (cc / codex / gemini)
+   - Cache results: `ORCH_RUNTIME`, `ORCH_AVAILABLE_AGENTS`
+   - Announce: `"Orchestrating from [runtime]. Available agents: [list]. Routing by capability."`
+   - See `runtime-routing.md` for full capability matrix and routing algorithm
+
 1. **Explore context:**
    - If user referenced a PRD / design doc (e.g. `@path/to/prd.md`, `@path/to/architecture.md`) → **load and read in full first** before touching code
    - Grep repo for affected modules and files based on PRD requirements
@@ -29,7 +36,7 @@ The full orchestration flow CC runs for any non-trivial task. Load this referenc
 
 Only then: produce Execution Plan.
 
-For ambiguous/novel/high-stakes tasks, run `/co:think` first (see `thinking-decision.md`).
+For ambiguous/novel/high-stakes tasks, run `/co-think` first (see `thinking-decision.md`).
 
 **PRD-first precedent** (MyTeam session 042d4cee): user started with `2026-04-17-architecture-diagrams.md` + 4 module PRDs; loading these before exploration avoided wandering and kept Codex specs tight.
 
@@ -42,39 +49,49 @@ For ambiguous/novel/high-stakes tasks, run `/co:think` first (see `thinking-deci
 ```
 ### Plan
 
-[CC] Task A — files: src/api/...
-[Codex] Task B — files: src/ui/...
+[Self] Task A — files: src/api/...              (orchestrator executes locally)
+[Dispatch:CC] Task B — files: src/ui/...         (dispatch to Claude Code)
+[Dispatch:Codex] Task C — files: src/backend/... (dispatch to Codex)
+[Consult:Gemini] Task D — UI design direction    (advisory only, orchestrator implements)
 
-CC owns: backend, scripts, CI/CD, migrations, integration, tests
-Codex owns: [specific files/modules]
+Self owns: [files orchestrator handles directly]
+Dispatch:CC owns: [files routed to CC by capability matrix]
+Dispatch:Codex owns: [files routed to Codex by capability matrix]
 
 Worktrees: yes/no → branches + owners
 Subagents: yes/no → who, why
+Heartbeat: [enabled/disabled] for each dispatch task
 Verify: [test command or check]
 ```
 
-Show plan. Wait for confirm. Then execute. Optional: run `/co:plan-review` for CEO-mode critique before executing.
+**Label resolution:** `[Self]` = current runtime executes. `[Dispatch:*]` = route to named agent. Labels resolved by `resolve_routing()` from `cross-harness.md` using capability matrix from `runtime-routing.md`. Same plan works from either CC or Codex runtime — labels are runtime-agnostic.
+
+Show plan. Wait for confirm. Then execute. Optional: run `/co-plan-review` for CEO-mode critique before executing.
 
 ---
 
-## Default Work Distribution (boundary-based, not domain-based)
+## Default Work Distribution (capability-driven, runtime-agnostic)
 
-**Split by boundary clarity, not by frontend/backend.** Codex isn't a frontend specialist; this table is a starting heuristic based on "bounded modules parallelize better", not a capability claim.
+**Split by agent capability, not by runtime identity.** Routing uses the capability matrix from `runtime-routing.md`. The orchestrator (whoever is runtime) resolves `[Self]` vs `[Dispatch:*]` labels at plan time.
 
-| Claude Code (Tech Lead + primary executor) | Codex (Parallel Implementer) | Gemini (Specialist Consultant) |
-|--------------------------------------------|------------------------------|--------------------------------|
-| Requires repo-wide context (architecture, cross-cutting refactor) | Any **backend/script** module with clear file/API boundaries | Frontend design direction (2–3 variants, aesthetic review) |
-| Coordinates multiple subsystems | Independently verifiable (has its own tests or clear acceptance criteria) | CSS architecture / a11y / responsive audits |
-| Touches migrations, CI/CD, release pipelines | Isolated bug fixes with known scope | UI consistency scan across multiple files |
-| **Frontend work** — UI components, pages, interactions, styling, design systems (default: shadcn/ui + radix-nova, see `ui-style-standard.md`) | Parallel candidate implementations (compare and pick) | "Not ugly but not great" second opinion |
-| Integrates others' output | Current diff review (read-only) | Large-context repo architecture summary |
-| Makes final decisions on interfaces | — | — |
+| CC Capability (preferred tasks) | Codex Capability (preferred tasks) | Gemini Capability (advisory) |
+|---------------------------------|------------------------------------|-----------------------------|
+| Architecture & planning (repo-wide reasoning) | Bounded backend modules (clear file/API boundaries) | Frontend design direction (2–3 variants) |
+| Frontend/UI (components, state, CSS, design systems) | Isolated scripts (verifiable output) | CSS architecture / a11y / responsive audits |
+| Cross-cutting refactors (multi-module) | Parallel candidate implementations (compare & pick) | UI consistency scan |
+| High-risk ops after explicit approval (migrations, CI/CD, release, secrets/env, package manifests, destructive git/file ops) | Code review — read-only (structured feedback) | "Not ugly but not great" second opinion |
+| Integration & merge (needs both-sides context) | Isolated bug fixes (known scope, clear done-state) | Large-context repo architecture summary |
+| Repo-wide product/architecture tradeoffs | Existing-project detail changes (bounded, pattern-preserving) | — |
 
-**Why frontend → CC by default:** Claude (Sonnet 4.6+) has strong frontend judgment — component design, state management, CSS/design-system coherence, UX edge cases. Codex excels at bounded backend modules and scripts where the interface is stable and the test set is explicit. Assign backward from what each does *best*, not from category stereotypes.
+**Routing examples:**
+- CC runtime + Codex available → CC does frontend/arch locally, dispatches bounded backend to Codex
+- Codex runtime + CC available → Codex does bounded modules locally, dispatches frontend/arch to CC
+- CC runtime, no Codex → CC does everything locally (graceful degradation)
+- Codex runtime, no CC → Codex does what it can; cross-cutting tasks degraded but attempted
 
-**Practical heuristic:** If the task can be described with `Scope: [paths]` + `Off-limits: [paths]` + a verifiable done-state, **and** it's backend/script/isolated, dispatch to Codex. Frontend and cross-cutting work stays on CC unless there's a specific reason to parallelize.
+**Practical heuristic:** If task has `Scope: [paths]` + `Off-limits: [paths]` + verifiable done-state, **and** it's backend/script/isolated/bug-fix/detail-change → preferred agent is Codex. Frontend visual judgment, architecture, and cross-cutting changes → preferred agent is CC. High-risk ops bypass the normal matrix: current orchestrator keeps ownership, asks explicit approval, and only then executes locally or routes per the user's instruction. The routing algorithm in `runtime-routing.md` handles resolution.
 
-**Calibration:** This is v0 default. Run 5+ real sessions, then use `.eval-scores.jsonl` weak-point data to adjust per-project (via `/co:review` + `/co:promote`).
+**Calibration:** Run 5+ real sessions, then use `.eval-scores.jsonl` weak-point data to adjust per-project (via `/co-review` + `/co-promote`).
 
 ---
 
@@ -122,19 +139,29 @@ Fold the three stages into one Codex spec via `<verification_loop>` + `<groundin
 
 ---
 
-## Codex Invocation (Summary)
+## Cross-Agent Dispatch (Summary)
 
-Full protocol in `codex-protocol.md`. Key points:
+### CC → Codex (full protocol in `codex-protocol.md`)
 
 - **Foreground** (< 10 min, bounded) vs **background** (complex, returns job-id)
 - **Thread persistence:** new task = fresh; "continue" = `--resume-last`; force new = `--fresh`
 - **Write mode:** `--write` for implementation, none for review
 - **Effort:** `low` (simple UI), `high` (complex backend), `xhigh` (deep diagnosis)
-- **XML structured prompt** (< 200 words) — `<task>`, `<structured_output_contract>`, `<default_follow_through_policy>`, optional `<verification_loop>`, `<grounding_rules>`, `<action_safety>`
+- **XML structured prompt** (< 200 words)
 - **Result handling:** present findings as-is, STOP before fixing, report failures honestly
-- **Co-Decision:** route CC's internal questions to Codex before asking user — keeps input flow uninterrupted
+- **Co-Decision:** route internal questions to Codex before asking user
 - **Security gate:** scan task spec, block DB/env/CI/secrets, confirm high-risk
-- **Quality tracking:** rolling 20-dispatch window, penalty < 40% success rate, hard stop at 3+ consecutive failures
+- **Quality tracking:** rolling 20-dispatch window in `.codex-quality.jsonl`
+- **Heartbeat:** background tasks auto-enable heartbeat monitoring (see `heartbeat-protocol.md`)
+
+### Codex → CC (full protocol in `codex-runtime.md`)
+
+- **Mechanism:** `claude -p "<prompt>" --output-format json --max-budget-usd N`
+- **NL prompt format** (CC processes NL better than XML): Task + Scope + Off-limits + Verify + Output
+- **Budget control:** $2–$20 per dispatch, never exceed $20
+- **Timeout:** wrapped with `.codex/orchestration/bin/run-with-timeout.sh` or equivalent portable fallback
+- **Quality tracking:** rolling 20-dispatch window in `.cc-quality.jsonl`
+- **Heartbeat:** same heartbeat protocol as CC → Codex dispatch
 
 ---
 

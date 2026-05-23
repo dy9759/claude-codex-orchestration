@@ -5,11 +5,11 @@ description: Cross-session history search for claude-codex-orchestration. Before
 
 # /co-sessions — Cross-Session History Search
 
-Full protocol: `~/.claude/skills/claude-codex-orchestration/references/knowledge-compounding.md` §/co:sessions.
+Full protocol: `~/.claude/skills/claude-codex-orchestration/references/knowledge-compounding.md` §/co-sessions.
 
 ## Quick run
 
-Before complex task, dispatch via built-in Agent tool (`subagent_type: general-purpose`, `run_in_background: true`):
+**CC runtime:** Dispatch via built-in Agent tool (`subagent_type: general-purpose`, `run_in_background: true`):
 
 ```
 Search prior sessions for "<specific problem — not generic topic>".
@@ -20,4 +20,19 @@ Return:  prior approaches tried, dead ends + why failed, key decisions +
          file path for each finding.
 ```
 
-Use to avoid repeating failed approaches and to skip rediscovery cost.
+**Codex runtime (no Agent tool):** Direct shell search fallback:
+
+```bash
+# Search CC session transcripts
+grep -rl "<problem keywords>" ~/.claude/projects/ 2>/dev/null | head -20
+
+# Search Codex session history
+grep -rl "<problem keywords>" ~/.codex/sessions/ 2>/dev/null | head -20
+
+# Read top matches
+for f in $(grep -rl "<keywords>" ~/.claude/projects/ ~/.codex/sessions/ 2>/dev/null | head -5); do
+  echo "=== $f ===" && head -50 "$f"
+done
+```
+
+Output: same summary format regardless of runtime. Use to avoid repeating failed approaches.

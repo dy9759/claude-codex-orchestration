@@ -239,7 +239,7 @@ mkdir -p "$HOME/.claude/gemini-hook-logs"
 cat > "$HOME/.claude/gemini-hook-logs/$(date +%Y%m%d-%H%M%S).json"
 ```
 
-Every Gemini invocation lands a JSON payload with full request/response. Use for debugging, quality tracking, and compounding (`/co:compound`).
+Every Gemini invocation lands a JSON payload with full request/response. Use for debugging, quality tracking, and compounding (`/co-compound`).
 
 ---
 

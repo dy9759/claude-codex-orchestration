@@ -9,16 +9,25 @@ At session start, detect the **active** harness (which agent is currently runnin
 ```bash
 detect_harness() {
   # Stage 1 — env vars set by the harness process itself (authoritative)
-  [ -n "$CLAUDECODE" ] || [ -n "$CLAUDE_CODE_SESSION" ] && { echo "claude-code"; return; }
-  [ -n "$CURSOR_AGENT" ]    && { echo "cursor";     return; }
-  [ -n "$CODEX_SESSION_ID" ] && { echo "codex";      return; }
-  [ -n "$OPENCODE_SESSION" ] && { echo "opencode";   return; }
+  if [ -n "${CLAUDECODE:-}" ] || [ -n "${CLAUDE_CODE_SESSION:-}" ]; then
+    echo "claude-code"; return
+  fi
+  if [ -n "${CODEX_SESSION_ID:-}" ] || [ -n "${CODEX_THREAD_ID:-}" ] || \
+     [ -n "${CODEX_CI:-}" ] || [ -n "${CODEX_SHELL:-}" ]; then
+    echo "codex"; return
+  fi
+  if [ -n "${CURSOR_AGENT:-}" ]; then
+    echo "cursor"; return
+  fi
+  if [ -n "${OPENCODE_SESSION:-}" ]; then
+    echo "opencode"; return
+  fi
 
   # Stage 2 — filesystem fallback (project-level hints, less reliable)
   [ -f .cursorrules ] || [ -d .cursor ]    && { echo "cursor";   return; }
   [ -f .opencode/opencode.json ]           && { echo "opencode"; return; }
-  [ -d ~/.claude/skills ]                  && { echo "claude-code"; return; }
   command -v codex >/dev/null 2>&1         && { echo "codex";    return; }
+  [ -d ~/.claude/skills ]                  && { echo "claude-code"; return; }
 
   echo "unknown"
 }
@@ -36,9 +45,9 @@ Announce harness once: `"Detected harness: [harness]. Applying matching config."
 |---------|-------------|--------|-------|----------|
 | Global rules | `~/.claude/CLAUDE.md` | `.cursorrules` | `AGENTS.md` | `.opencode/opencode.json` |
 | Project rules | `CLAUDE.md` (local) | `.cursor/rules/*.mdc` | `AGENTS.md` | `.opencode/instructions/` |
-| Skills/workflows | `~/.claude/skills/*.md` | `.cursor/skills/` | No native equivalent | `.opencode/prompts/` |
+| Skills/workflows | `~/.claude/skills/*.md` | `.cursor/skills/` | `AGENTS.md` + `.codex/orchestration/` managed block | `.opencode/prompts/` |
 | Hooks | `settings.json` hooks | `.cursor/hooks.json` | `.codex/config.toml` approval | `.opencode/` events |
-| Slash commands | `/skill-name` via Skill tool | Not supported | Not supported | Commands in config |
+| Slash commands | `/skill-name` via Skill tool | Not supported | Not supported; use AGENTS command equivalents for `/co-*` | Commands in config |
 | Agent instructions | CLAUDE.md + SKILL.md | `.cursorrules` | `AGENTS.md` | `.opencode/instructions/` |
 
 ## AGENTS.md as Universal Baseline
@@ -72,10 +81,111 @@ CC skills have no direct equivalent in other harnesses. Translate:
 
 1. **Core rules** → extract into `AGENTS.md` (universal) and `CLAUDE.md` (CC + Cursor)
 2. **Cursor** → distill into `.cursor/rules/orchestration.mdc` (MDC format with frontmatter)
-3. **Codex** → AGENTS.md covers most; add orchestration config to `.codex/config.toml`
+3. **Codex** → run `sub-skills/install-codex.sh`; it copies the skill bundle to `.codex/orchestration/` and adds an AGENTS managed block with `/co-*` command equivalents
 4. **OpenCode** → extract to `.opencode/instructions/orchestration.txt`
 
 **Environment variable gating** (from ECC pattern): `HOOK_PROFILE=minimal|standard|strict` to switch hook intensity without editing files. `DISABLED_HOOKS` to gate specific hooks at runtime.
+
+## Agent Availability Detection
+
+Detect which agents are available for dispatch from the current runtime. Called at Phase 0 step 0.
+
+```bash
+detect_available_agents() {
+  local agents=""
+
+  # CC available?
+  if command -v claude >/dev/null 2>&1; then
+    # Verify claude CLI responds (not just exists)
+    claude --version >/dev/null 2>&1 && agents="$agents cc"
+  fi
+
+  # Codex available?
+  if command -v codex >/dev/null 2>&1; then
+    codex --version >/dev/null 2>&1 && agents="$agents codex"
+  fi
+
+  # Gemini available? (only reachable from CC via MCP)
+  # Check if gemini-cli MCP is configured in CC's settings
+  if [ -n "${CLAUDECODE:-}" ] || [ -n "${CLAUDE_CODE_SESSION:-}" ]; then
+    # In CC runtime — check MCP config for gemini-cli
+    if grep -q "gemini-cli" ~/.claude/settings.json 2>/dev/null || \
+       grep -q "gemini-cli" .claude/settings.json 2>/dev/null; then
+      agents="$agents gemini"
+    fi
+  fi
+
+  echo "${agents# }"  # trim leading space
+}
+```
+
+## Capability Routing Resolution
+
+Given runtime identity and available agents, resolve task routing per capability matrix (`runtime-routing.md`).
+
+```bash
+resolve_routing() {
+  local task_type="$1" runtime="$2" available="$3"
+
+  # Capability matrix lookup (simplified — full matrix in runtime-routing.md)
+  local preferred fallback
+  case "$task_type" in
+    architecture|planning|frontend|cross-cutting)
+      preferred="cc"; fallback="self" ;;
+    migrations|cicd|release|secrets|env|package-manifest|destructive-git)
+      preferred="self"; fallback="" ;;
+    integration|merge)
+      preferred="self"; fallback="" ;;
+    bounded-backend|isolated-script|parallel-impl|code-review|isolated-fix|bug-fix|detail-change|maintenance-fix|existing-detail)
+      preferred="codex"; fallback="cc" ;;
+    ui-design-judgment)
+      preferred="gemini"; fallback="cc" ;;
+    *)
+      preferred="self"; fallback="" ;;
+  esac
+
+  # Resolution: preferred == runtime → local
+  if [ "$preferred" = "self" ] || [ "$preferred" = "$runtime" ]; then
+    echo "local:$runtime"
+    return
+  fi
+
+  # Preferred available → dispatch
+  if echo "$available" | grep -qw "$preferred"; then
+    echo "dispatch:$preferred"
+    return
+  fi
+
+  # Fallback == runtime → local
+  if [ "$fallback" = "self" ] || [ "$fallback" = "$runtime" ]; then
+    echo "local:$runtime"
+    return
+  fi
+
+  # Fallback available → dispatch
+  if [ -n "$fallback" ] && echo "$available" | grep -qw "$fallback"; then
+    echo "dispatch:$fallback"
+    return
+  fi
+
+  # Graceful degradation
+  echo "local:$runtime:degraded"
+}
+```
+
+**Usage at Phase 0:**
+```bash
+RUNTIME="$(detect_harness)"
+AVAILABLE="$(detect_available_agents)"
+echo "Runtime: $RUNTIME | Available agents: $AVAILABLE"
+
+# Per-task example
+resolve_routing "frontend" "$RUNTIME" "$AVAILABLE"
+# CC runtime, codex+gemini available → "local:cc" (CC preferred for frontend)
+# Codex runtime, cc+gemini available → "dispatch:cc" (CC preferred, dispatch)
+```
+
+---
 
 ## Bootstrap Per Harness
 

@@ -32,18 +32,18 @@ for skill in "${SKILLS[@]}"; do
   if [ ! -f "$dst" ]; then
     cp "$src" "$dst"
     echo "  ✓ installed $skill"
-    ((installed++))
+    installed=$((installed + 1))
   elif [ "$FORCE" = "--force" ] || ! cmp -s "$src" "$dst"; then
     if [ "$FORCE" = "--force" ]; then
       cp "$src" "$dst"
       echo "  ↻ updated  $skill"
-      ((updated++))
+      updated=$((updated + 1))
     else
       echo "  = $skill (differs from source; use --force to overwrite)"
-      ((skipped++))
+      skipped=$((skipped + 1))
     fi
   else
-    ((skipped++))
+    skipped=$((skipped + 1))
   fi
 done
 

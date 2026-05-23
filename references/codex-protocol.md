@@ -4,11 +4,13 @@ All Codex calls go through the `codex:codex-rescue` subagent, which wraps `codex
 
 ## Foreground vs Background
 
-| Task profile | Mode | Why |
-|---|---|---|
-| Small, bounded, < 10 min | `foreground` | Blocks CC until done; simpler coordination |
-| Complex, multi-step, open-ended | `background` | Returns `job-id`; CC continues other work; retrieve with `result` |
-| Review / adversarial review | `foreground` | Structured output, expect immediate feedback |
+| Task profile | Mode | Heartbeat | Why |
+|---|---|---|---|
+| Small, bounded, < 10 min | `foreground` | Timeout only (10min default) | Blocks orchestrator until done; simpler coordination |
+| Complex, multi-step, open-ended | `background` | Full (L1/L2/L3) | Returns `job-id`; orchestrator continues other work; heartbeat monitors |
+| Review / adversarial review | `foreground` | Timeout only (5min default) | Structured output, expect immediate feedback |
+
+**Heartbeat integration:** Background tasks automatically enable heartbeat monitoring per `heartbeat-protocol.md`. Foreground tasks get a portable timeout wrapper — if exceeded, orchestrator kills and falls back to self-execution.
 
 Use the built-in `review` or `adversarial-review` commands for reviewing git diffs — do not write a custom review `task` prompt; the built-in contracts are better.
 
@@ -148,7 +150,7 @@ Scope: [declared files]
 Verdict: safe-to-dispatch / requires-confirmation / blocked
 ```
 
-If `blocked`: rewrite task spec to remove the blocked operation, assign it to CC instead.
+If `blocked`: rewrite task spec to remove the blocked operation. Keep the blocked work with the current orchestrator, require explicit user approval, and include rollback/verify steps before any execution.
 If `requires-confirmation`: pause, show warning in full (not caveman), wait for user yes/no.
 
 ---
@@ -176,7 +178,7 @@ Track per-dispatch Codex performance. Persist to `.codex-quality.jsonl`:
 
 **Semantic failure injection** — technical success ≠ acceptance: if integration review rejects Codex output (scope-creep, size violation, unintended changes), record as `status: rejected` even if Codex itself returned no errors. Feeds the same success-rate metric as hard failures.
 
-**Auto-evolve trigger** — every 5 Codex dispatches, check quality. If warning threshold hit → run `/co:review` targeting `dispatch` dimension. Do not wait for the 5-session cadence.
+**Auto-evolve trigger** — every 5 Codex dispatches, check quality. If warning threshold hit → run `/co-review` targeting `dispatch` dimension. Do not wait for the 5-session cadence.
 
 ---
 
@@ -186,8 +188,27 @@ When dispatching 2+ Codex tasks in parallel, use a task board to prevent double-
 
 **Directory:** `.tasks/` in repo root. Each task is a JSON file:
 ```json
-{"id": 1, "subject": "implement login UI", "scope": "src/ui/auth/", "status": "pending", "owner": null}
+{
+  "id": 1,
+  "subject": "implement login UI",
+  "scope": "src/ui/auth/",
+  "status": "pending",
+  "owner": null,
+  "dispatch": {
+    "pid": null,
+    "started_at": null,
+    "timeout_s": 1800,
+    "heartbeat": {
+      "last_check": null,
+      "status": "DISPATCHED",
+      "stall_count": 0,
+      "output_bytes": 0
+    }
+  }
+}
 ```
+
+The `dispatch` block is populated when the task is dispatched to an agent. See `heartbeat-protocol.md` for state machine and fallback logic.
 
 **Claim rule:** CC assigns `owner` + sets `status: "in_progress"` atomically before dispatching to Codex. No task gets two owners. If Codex finishes early and grabs a new task — it must read `.tasks/` and claim explicitly. CC audits `.tasks/` at integration to verify no overlaps.
 

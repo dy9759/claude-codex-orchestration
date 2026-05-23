@@ -1,4 +1,4 @@
-# Knowledge Compounding (`/co:compound` + `/co:sessions`)
+# Knowledge Compounding (`/co-compound` + `/co-sessions`)
 
 **Why:** First time solving a problem = research. Document it → next occurrence = minutes. Knowledge compounds exponentially across sessions, repos, and agents.
 
@@ -6,7 +6,7 @@
 
 ---
 
-## `/co:compound` — Two Modes
+## `/co-compound` — Two Modes
 
 Ask user before proceeding (never pre-select):
 ```
@@ -16,7 +16,7 @@ Ask user before proceeding (never pre-select):
 
 ## Full Mode Phases
 
-*(These are internal phases of `/co:compound` — unrelated to the main orchestration Phase 0.)*
+*(These are internal phases of `/co-compound` — unrelated to the main orchestration Phase 0.)*
 
 **Compound Step A: Auto Memory Scan**
 Check MEMORY.md for entries relevant to the problem. Pass any matches as supplementary context to Step B agents (not primary evidence — conversation history takes priority).
@@ -66,7 +66,7 @@ docs/solutions/  # solved problems (bugs, patterns, workflow), organized by cate
 
 ---
 
-## `/co:sessions` — Session History Search
+## `/co-sessions` — Session History Search
 
 Before starting complex work: search prior Claude/Codex sessions for the same repo.
 
