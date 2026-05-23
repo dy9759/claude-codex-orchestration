@@ -584,12 +584,18 @@ See `references/self-correction.md` §Layer 2.5 for fingerprint format, dedup lo
 ```bash
 runtime_routing_setup() {
   local harness available
+  local helper=".codex/orchestration/bin/detect-orchestration-runtime.sh"
 
-  # 1. Detect current runtime (from cross-harness.md)
-  harness="$(detect_harness)"
-
-  # 2. Detect available agents (from cross-harness.md)
-  available="$(detect_available_agents)"
+  # 1. Detect current runtime + available agents.
+  # Prefer the executable helper installed by install-codex.sh; fallback to
+  # cross-harness.md shell functions when the bundle is not installed yet.
+  if [ -x "$helper" ]; then
+    harness="$("$helper" runtime)"
+    available="$("$helper" agents "$harness")"
+  else
+    harness="$(detect_harness)"
+    available="$(detect_available_agents)"
+  fi
 
   # 3. Announce
   echo "[Orchestration] Runtime: $harness | Available agents: $available"
@@ -609,7 +615,7 @@ runtime_routing_setup() {
       echo "  CC runtime: dispatching to Codex via codex:codex-rescue for bounded tasks"
       ;;
     *)
-      echo "  Unknown runtime: all tasks execute locally (no cross-agent dispatch)"
+      echo "  Unknown runtime or unavailable peer agents: all tasks execute locally unless the user explicitly routes elsewhere"
       ;;
   esac
 }

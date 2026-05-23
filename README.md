@@ -114,7 +114,7 @@ git clone https://github.com/dy9759/claude-codex-orchestration \
 
 **跨机部署：** 复制 `CLAUDE.md.template`（仓库根，20 行）到 `~/.claude/CLAUDE.md`，触发 `§Preferred skill` 规则自动调用本 skill。其他机器用户无需手动复制全部规则。
 
-**Codex 作为 orchestrator：** 运行 `bash sub-skills/install-codex.sh [project-root]`。脚本会把 `SKILL.md`、全部 references、`/co-*` 等价命令说明和 portable timeout wrapper 复制到 `.codex/orchestration/`，并在项目 `AGENTS.md` 写入 managed block，让 Codex 能自动发现本 skill。
+**Codex 作为 orchestrator：** 运行 `bash sub-skills/install-codex.sh [project-root]`。脚本会把 `SKILL.md`、全部 references、`/co-*` 等价命令说明、runtime/agent 探测脚本和 portable timeout wrapper 复制到 `.codex/orchestration/`，并在项目 `AGENTS.md` 写入 managed block，让 Codex 能自动发现本 skill。
 
 **Claude Code runtime 必需：**
 - Claude Code CLI
@@ -203,6 +203,7 @@ Phase 0 理解 → Runtime 检测 + 可用 agent 探测 → Execution Plan 格�
 ### 5. 安全与质量
 - **Smart Tool RAG** — BM25 + 语义二阶段技能检索
 - **Codex Quality Tracking** — 滚动 20 次窗口，< 40% 成功率触发惩罚
+- **Graceful Degradation** — Codex/CC 缺失、未登录、超时或质量 hard-stop 时，按 fallback 路由本地执行，不伪造未咨询 agent 的观点
 - **Dispatch Security Gate** — DB/env/CI/密钥/强删/git 历史改写一律阻断
 - **Task Board** — `.tasks/` 原子认领防双写
 - **Worktree** — `feature/<agent>-<desc>`，生命周期 ≤ 1–3 天
@@ -429,7 +430,7 @@ Skill 本身是 git 仓库（clone 自 `dy9759/claude-codex-orchestration`）。
 2. **Plan before execute** — 无批准 Plan 不写代码
 3. **Single writer per file** — 铁律，永远
 4. **Token-aware** — 内部通信压缩；代码 + 用户交付物保持完整
-5. **Human-in-loop minimization** — Codex Co-Decision 优先，低置信度才升级；决策集中到两个时刻
+5. **Human-in-loop minimization** — Codex Co-Decision 只在可用、健康、且能节省时间时使用；决策集中到两个时刻
 6. **Self-correcting** — 4 层纠错（Layer 0 打分 / Layer 1 评估 / Layer 2 捕获 / Layer 3 晋升），锁定评估器防作弊
 7. **Cross-harness** — AGENTS.md 通用基线，CLAUDE.md 指针
 8. **Maintainability over speed** — 优化 6 月后的可读性，不优化行数
@@ -477,6 +478,9 @@ Skill 本身是 git 仓库（clone 自 `dy9759/claude-codex-orchestration`）。
 | v5 (`c2b8283`, §5.2 版本化) | §5.2 版本感知 + surgical replacement + 时间戳备份 | **83.2** |
 | v7 (runtime-agnostic + heartbeat) | 能力矩阵路由 + 心跳监控 + Codex-as-orchestrator + fallback 机制 | **91.1** |
 | v8 (Codex runtime hardening) | Codex Desktop 检测 + AGENTS managed block + `/co-*` Codex 等价触发 + portable timeout + 高风险策略统一 | **86.1** |
+| v9 (operational fallback) | 可执行 runtime/agent 探测脚本 + Codex/CC 不可用降级 + Co-Decision 时间预算 + v8 分数下降说明 | **88.3** |
+
+v8 分数低于 v7 的原因：v7 的 91.1 偏设计乐观，v8 按实际 Codex Desktop 安装、AGENTS 自动引用、`/co-*` 等价触发、macOS timeout 和高风险策略重新验证后，暴露出 validation/executability 仍不足；v9 先补可执行探测和降级规则，而不是扩大架构范围。
 
 查看实时分数：`cat .skill-scores.jsonl`。
 

@@ -90,9 +90,28 @@ CC skills have no direct equivalent in other harnesses. Translate:
 
 Detect which agents are available for dispatch from the current runtime. Called at Phase 0 step 0.
 
+**Executable helper:** use `scripts/detect-orchestration-runtime.sh` from this repo, or `.codex/orchestration/bin/detect-orchestration-runtime.sh` after running `sub-skills/install-codex.sh`.
+
+```bash
+./scripts/detect-orchestration-runtime.sh summary
+# runtime=codex
+# available_agents=codex cc
+
+./scripts/detect-orchestration-runtime.sh route bug-fix
+# local:codex
+```
+
+The shell functions below are the portable fallback/reference implementation. Keep behavior aligned with the script.
+
 ```bash
 detect_available_agents() {
   local agents=""
+  local runtime="$(detect_harness)"
+
+  case "$runtime" in
+    claude-code) agents="$agents cc" ;;
+    codex) agents="$agents codex" ;;
+  esac
 
   # CC available?
   if command -v claude >/dev/null 2>&1; then
@@ -105,14 +124,16 @@ detect_available_agents() {
     codex --version >/dev/null 2>&1 && agents="$agents codex"
   fi
 
-  # Gemini available? (only reachable from CC via MCP)
-  # Check if gemini-cli MCP is configured in CC's settings
+  # Gemini available? Direct from CC, relayed through CC from other runtimes.
   if [ -n "${CLAUDECODE:-}" ] || [ -n "${CLAUDE_CODE_SESSION:-}" ]; then
-    # In CC runtime — check MCP config for gemini-cli
     if grep -q "gemini-cli" ~/.claude/settings.json 2>/dev/null || \
        grep -q "gemini-cli" .claude/settings.json 2>/dev/null; then
       agents="$agents gemini"
     fi
+  elif echo "$agents" | grep -qw "cc" && \
+       { grep -q "gemini-cli" ~/.claude/settings.json 2>/dev/null || \
+         grep -q "gemini-cli" .claude/settings.json 2>/dev/null; }; then
+    agents="$agents gemini-via-cc"
   fi
 
   echo "${agents# }"  # trim leading space
@@ -126,14 +147,20 @@ Given runtime identity and available agents, resolve task routing per capability
 ```bash
 resolve_routing() {
   local task_type="$1" runtime="$2" available="$3"
+  local runtime_agent="$runtime"
+  [ "$runtime" = "claude-code" ] && runtime_agent="cc"
+
+  # High-risk override. Never automatic cross-agent dispatch.
+  case "$task_type" in
+    migrations|database|db|cicd|ci|release|secrets|env|package-manifest|package|destructive-git|destructive-file|destructive)
+      echo "local:$runtime:requires-explicit-approval"; return ;;
+  esac
 
   # Capability matrix lookup (simplified — full matrix in runtime-routing.md)
   local preferred fallback
   case "$task_type" in
     architecture|planning|frontend|cross-cutting)
       preferred="cc"; fallback="self" ;;
-    migrations|cicd|release|secrets|env|package-manifest|destructive-git)
-      preferred="self"; fallback="" ;;
     integration|merge)
       preferred="self"; fallback="" ;;
     bounded-backend|isolated-script|parallel-impl|code-review|isolated-fix|bug-fix|detail-change|maintenance-fix|existing-detail)
@@ -144,8 +171,17 @@ resolve_routing() {
       preferred="self"; fallback="" ;;
   esac
 
+  if [ "$preferred" = "gemini" ]; then
+    if [ "$runtime" = "claude-code" ] && echo "$available" | grep -qw "gemini"; then
+      echo "consult:gemini"; return
+    fi
+    if echo "$available" | grep -qw "gemini-via-cc"; then
+      echo "dispatch:cc:gemini-relay"; return
+    fi
+  fi
+
   # Resolution: preferred == runtime → local
-  if [ "$preferred" = "self" ] || [ "$preferred" = "$runtime" ]; then
+  if [ "$preferred" = "self" ] || [ "$preferred" = "$runtime_agent" ]; then
     echo "local:$runtime"
     return
   fi
@@ -157,7 +193,7 @@ resolve_routing() {
   fi
 
   # Fallback == runtime → local
-  if [ "$fallback" = "self" ] || [ "$fallback" = "$runtime" ]; then
+  if [ "$fallback" = "self" ] || [ "$fallback" = "$runtime_agent" ]; then
     echo "local:$runtime"
     return
   fi
@@ -203,9 +239,8 @@ git clone <repo> ~/.claude/skills/claude-codex-orchestration
 
 **Codex** (AGENTS.md-driven):
 ```bash
-# Copy AGENTS.md to project root
-# Add orchestration config to .codex/config.toml:
-# [profiles.orchestrate] sandbox_mode = "workspace-write"
+bash sub-skills/install-codex.sh /path/to/project
+# Adds AGENTS.md managed block + .codex/orchestration/ skill bundle
 ```
 
 **OpenCode** (native agent config):

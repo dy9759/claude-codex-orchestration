@@ -182,7 +182,7 @@ EOF
 
 Record the issue number in the Execution Plan's `Deferred` section so it doesn't get lost.
 
-**Unclear whether blocking?** Route through Codex Co-Decision: ask Codex to classify with `confidence` level. If low confidence → escalate to user one-line question.
+**Unclear whether blocking?** Route through Codex Co-Decision only when Codex is available and the second opinion is faster than asking the user. Ask Codex to classify with `confidence` level; if low confidence, unavailable, or timed out, escalate to the user with a one-line question.
 
 ### Priority 3 — Next task from Execution Plan
 

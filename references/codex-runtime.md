@@ -19,6 +19,15 @@ claude -p "<prompt>" --output-format json --max-budget-usd N
 
 Use `.codex/orchestration/bin/run-with-timeout.sh` instead of GNU `timeout`; macOS does not ship GNU coreutils by default. The wrapper delegates to `timeout`/`gtimeout` when present and otherwise uses a POSIX-ish shell fallback.
 
+For runtime and peer-agent detection, use:
+
+```bash
+.codex/orchestration/bin/detect-orchestration-runtime.sh summary
+.codex/orchestration/bin/detect-orchestration-runtime.sh route frontend
+```
+
+If `claude` is missing, unauthenticated, or times out, Codex keeps execution local or asks the user according to `runtime-routing.md` rather than pretending CC was consulted.
+
 ### Prompt Format (Natural Language — CC Processes NL Better Than XML)
 
 ```

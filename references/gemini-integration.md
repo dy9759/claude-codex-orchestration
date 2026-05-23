@@ -12,6 +12,7 @@ CC orchestrator ──► Gemini specialist ──► CC fallback
 - CC is always primary: reads code, writes code, runs commands, verifies in browser
 - Gemini is consulted for specific frontend/UI judgment, never for execution
 - CC makes every final decision, every patch landing, every verification
+- Gemini may return small illustrative CSS/a11y/component snippets when they clarify a recommendation; CC still adapts, implements, and verifies them locally
 ```
 
 **Anti-pattern to avoid:** "Gemini main executor, CC fallback". Gemini is an advisor, not a replacement.

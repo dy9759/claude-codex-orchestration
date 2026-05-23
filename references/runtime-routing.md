@@ -37,12 +37,28 @@ Route these to Codex first:
 
 Keep with CC instead when the task needs repo-wide architecture judgment, frontend visual/design judgment, broad cross-module refactoring, or when ownership cannot be made explicit. High-risk ops are a separate category: do not route them through the Codex-first maintenance bias or any automatic cross-agent dispatch. The current orchestrator must produce a plan, ask for explicit approval, and keep execution local unless the user explicitly routes it elsewhere.
 
+### Agent Unavailable / Unstable Rule
+
+If the preferred agent is missing, unauthenticated, over budget, timing out, or under a quality hard-stop, do not block on orchestration ceremony. Route to the fallback agent; if no fallback is available, the current runtime executes locally with `degraded: true`.
+
+Concrete triggers:
+- `claude --version` / `codex --version` fails, auth returns forbidden/unauthorized, or the command is absent
+- portable timeout wrapper returns `124`
+- rolling quality file (`.codex-quality.jsonl` or `.cc-quality.jsonl`) shows success rate < 40% or 3 consecutive failures
+- user request is narrow enough that local execution is faster than dispatch setup
+
+Log degraded routing to `.error-log.jsonl` with `category: routing-degradation`; do not invent a synthetic "Codex view" or "CC view" when that agent was not actually consulted.
+
 ---
 
 ## Routing Algorithm
 
 ```
 route(task_type, runtime, available_agents):
+  # 0. High-risk override — never automatic cross-agent dispatch
+  if task_type in HIGH_RISK:
+    return { action: "local", agent: runtime, requires_explicit_approval: true }
+
   preferred = MATRIX[task_type].preferred
   fallback  = MATRIX[task_type].fallback
 
@@ -69,6 +85,8 @@ route(task_type, runtime, available_agents):
 **Degradation logging:** When step 5 triggers, log to `.error-log.jsonl` with `category: routing-degradation` so `/co-review` can track patterns.
 
 **High-risk override:** before the algorithm above, if task_type is migrations/CI/release/secrets/env/package manifests/destructive git or file operations, return `local:<runtime>:requires-explicit-approval`. Never cross-dispatch these automatically.
+
+**Executable check:** `scripts/detect-orchestration-runtime.sh route <task-type>` implements the same routing contract for local validation and Codex installs.
 
 ---
 

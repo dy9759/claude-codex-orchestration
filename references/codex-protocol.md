@@ -74,6 +74,7 @@ Checklist before sending:
 - After presenting review findings: **STOP**. Do not fix anything. Explicitly ask which issues the user wants addressed
 - If Codex run failed: report the failure and stop — do not generate a substitute CC answer
 - If Codex was never invoked: return nothing, do not improvise
+- If Codex is unavailable or unhealthy, say that plainly and use `runtime-routing.md` fallback rules; do not label local reasoning as Codex input
 
 ---
 
@@ -89,6 +90,19 @@ When CC would normally pause and ask the user a clarifying question — **route 
 - CC needs a second opinion on a risk assessment
 
 **Never route to Codex for:** security decisions, irreversible operations, blocked dispatch patterns (Dispatch Security Gate rules apply), anything user must explicitly approve.
+
+### Time-Budget Rule
+
+Codex Co-Decision is a latency tradeoff, not a ritual. Use it only when the second opinion is likely to save more time than it costs.
+
+Skip Co-Decision and proceed directly when:
+- the local answer is obvious from code/tests/docs
+- the user has already stated the preference
+- the decision is high-risk and needs explicit user approval
+- a one-line user question is faster than dispatching Codex
+- Codex is unavailable, unauthenticated, over budget, or under a quality hard-stop
+
+Default Co-Decision timeout: 90s. On timeout, log `category: codex-unavailable` and continue with the safe local default or ask the user if truly blocked.
 
 ### Co-Decision Pattern
 

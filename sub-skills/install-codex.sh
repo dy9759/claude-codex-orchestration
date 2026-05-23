@@ -48,11 +48,15 @@ for src in "$SKILL_DIR"/sub-skills/co-*/SKILL.md; do
 done
 echo "  -> $commands command equivalent docs"
 
-if [ -f "$SKILL_DIR/scripts/run-with-timeout.sh" ]; then
-  cp "$SKILL_DIR/scripts/run-with-timeout.sh" "$ORCH_DIR/bin/run-with-timeout.sh"
-  chmod +x "$ORCH_DIR/bin/run-with-timeout.sh"
-  echo "  -> bin/run-with-timeout.sh"
-fi
+script_count=0
+for src in "$SKILL_DIR"/scripts/*.sh; do
+  [ -f "$src" ] || continue
+  name="$(basename "$src")"
+  cp "$src" "$ORCH_DIR/bin/$name"
+  chmod +x "$ORCH_DIR/bin/$name"
+  script_count=$((script_count + 1))
+  echo "  -> bin/$name"
+done
 
 block_file="$(mktemp)"
 cat > "$block_file" <<'BLOCK'
@@ -63,6 +67,7 @@ Codex should use the local orchestration bundle in `.codex/orchestration/`.
 
 - Start by reading `.codex/orchestration/SKILL.md` when the user mentions `claude-codex-orchestration`, asks for Claude/Codex cooperation, requests `/co-*`, or asks for planning/routing/skill self-correction.
 - For task routing, read `.codex/orchestration/runtime-routing.md` and `.codex/orchestration/codex-runtime.md`.
+- To detect runtime/agent availability, run `.codex/orchestration/bin/detect-orchestration-runtime.sh summary` and use `route <task-type>` for concrete routing decisions.
 - For cross-agent dispatch monitoring, use `.codex/orchestration/heartbeat-protocol.md`; use `.codex/orchestration/bin/run-with-timeout.sh` instead of assuming GNU `timeout` exists.
 - For high-risk work (DB migrations, env/secrets, package manifests, CI/CD/release, destructive git/file ops), do not auto-dispatch. Produce a plan, ask for explicit approval, and keep execution with the current orchestrator unless the user explicitly routes it elsewhere.
 
