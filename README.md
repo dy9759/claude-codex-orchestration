@@ -149,6 +149,28 @@ git clone https://github.com/dy9759/claude-codex-orchestration \
 先跑 /co-think 再规划
 ```
 
+**在 Codex 项目里启用：**
+
+```bash
+cd /path/to/project
+bash /Users/chauncey2025/Documents/GitHub/claude-codex-orchestration/sub-skills/install-codex.sh .
+```
+
+安装后可直接验证 Codex 是否能发现 orchestration bundle：
+
+```bash
+.codex/orchestration/bin/detect-orchestration-runtime.sh summary
+.codex/orchestration/bin/detect-orchestration-runtime.sh route bug-fix
+.codex/orchestration/bin/detect-orchestration-runtime.sh route frontend
+.codex/orchestration/bin/detect-orchestration-runtime.sh route database
+```
+
+典型结果：
+- `bug-fix` / `detail-change` → Codex-first，本地或派发到 Codex
+- `frontend` / `architecture` → Claude Code 优先；Codex runtime 会派发给 `claude -p`
+- `database` / `env` / `secrets` / `package-manifest` / `ci` → 当前 orchestrator 本地保留，必须先显式批准
+- peer agent 不可用、未登录、超时或质量 hard-stop → fallback 本地执行，并记录 degraded routing
+
 Claude Code 会：
 1. Session Start 自动 bootstrap（插件检测 + AGENTS.md 迁移，首次会话仅一次）
 2. Phase 0 探索仓库 + 理解需求
@@ -479,6 +501,7 @@ Skill 本身是 git 仓库（clone 自 `dy9759/claude-codex-orchestration`）。
 | v7 (runtime-agnostic + heartbeat) | 能力矩阵路由 + 心跳监控 + Codex-as-orchestrator + fallback 机制 | **91.1** |
 | v8 (Codex runtime hardening) | Codex Desktop 检测 + AGENTS managed block + `/co-*` Codex 等价触发 + portable timeout + 高风险策略统一 | **86.1** |
 | v9 (operational fallback) | 可执行 runtime/agent 探测脚本 + Codex/CC 不可用降级 + Co-Decision 时间预算 + v8 分数下降说明 | **88.3** |
+| v9.1 (README quickstart sync) | README 增加 Codex 项目安装、runtime 探测、路由验证和 fallback 结果说明 | **88.5** |
 
 v8 分数低于 v7 的原因：v7 的 91.1 偏设计乐观，v8 按实际 Codex Desktop 安装、AGENTS 自动引用、`/co-*` 等价触发、macOS timeout 和高风险策略重新验证后，暴露出 validation/executability 仍不足；v9 先补可执行探测和降级规则，而不是扩大架构范围。
 
