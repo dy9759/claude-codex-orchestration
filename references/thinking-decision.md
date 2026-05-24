@@ -4,9 +4,29 @@ Two structured thinking modes before acting on complex tasks. Run these **before
 
 ---
 
-## `/co-think` — Pre-Task Thinking (office-hours style)
+## `/co-think` — Pre-Task Thinking (grill / office-hours style)
 
-Two modes — detect from context or ask:
+Use `/co-think` before the Execution Plan when the task is fuzzy, the product
+wedge is unclear, or the implementation path has multiple plausible shapes.
+
+Operating rules:
+- Answer from repo/code/docs before asking. Check named docs, `AGENTS.md`,
+  `CONTEXT.md`, `CONTEXT-MAP.md`, `docs/`, ADRs, and adjacent code patterns.
+- Ask only user-owned or genuinely ambiguous questions.
+- Ask one question at a time. Smart-skip anything already answered or inferable.
+- Include a recommendation + confidence when asking per `decision-protocol.md`.
+- For fuzzy + high-verification-risk work, switch to a Run Contract before
+  dispatch (see `harness-workflows.md`).
+
+Decision ownership:
+
+| Decision type | Examples | Action |
+|---------------|----------|--------|
+| User-owned | target user, demand premise, public contract, security/privacy, data model, paid infra, external service, phase split | Ask explicitly |
+| Mechanical | local conventions, imports, framework patterns, file naming, existing test command | Derive from repo/docs |
+| Taste | copy tone, layout preference, naming alternatives, non-critical UX polish | Recommend a default; surface at checkpoint if material |
+
+Question lanes — detect from context; ask the lane only if unclear:
 
 **Product/Design mode** (new feature, API design, workflow change):
 Ask these one at a time — wait for each response before asking the next. Smart-skip if already answered.
@@ -21,15 +41,22 @@ Ask these one at a time — wait for each response before asking the next. Smart
 2. What existing pattern or code gets you 50% there?
 3. What would you add with unlimited time? (then ruthlessly cut back)
 4. What's the fastest path to something verifiable?
+5. Which assumption would be most expensive if wrong?
+
+**Domain/Docs mode** (existing domain language or project rules matter):
+1. Which existing doc/code path is source of truth?
+2. Which terms/contracts must not be renamed or reinterpreted?
+3. Which prior decision or ADR constrains this?
+4. What would make this change incompatible with current users or agents?
 
 **Escape hatch:** If the user says "just do it" or provides a fully-formed plan → skip to Premise Challenge only.
 
 **Premise Challenge** (always runs after questions):
 ```
 PREMISES:
-1. [statement] — CC assessment: valid / questionable
-2. [statement] — CC assessment: valid / questionable
-3. [assumption this approach depends on] — CC assessment: valid / questionable
+1. [statement] — orchestrator assessment: valid / questionable
+2. [statement] — orchestrator assessment: valid / questionable
+3. [assumption this approach depends on] — orchestrator assessment: valid / questionable
 ```
 Proceed when premises are confirmed. If a premise is wrong → revise approach before splitting.
 

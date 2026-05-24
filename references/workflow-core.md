@@ -13,15 +13,22 @@ The full orchestration flow CC runs for any non-trivial task. Load this referenc
    - Announce: `"Orchestrating from [runtime]. Available agents: [list]. Routing by capability."`
    - See `runtime-routing.md` for full capability matrix and routing algorithm
 
-1. **Explore context:**
+1. **Classify task shape** (see `harness-workflows.md`):
+   - Fuzzy + low verification risk → `/co-think` or grill-style questions, then plan
+   - Fuzzy + high verification risk → Run Contract first; no dispatch yet
+   - Clear + low verification risk → normal capability routing
+   - Clear + high verification risk → Run Contract + Proof Pack closeout
+
+2. **Explore context:**
    - If user referenced a PRD / design doc (e.g. `@path/to/prd.md`, `@path/to/architecture.md`) → **load and read in full first** before touching code
    - Grep repo for affected modules and files based on PRD requirements
    - Map: PRD sections → code paths → candidate Plan tasks
    - If no PRD → explore repo directly from user's spoken intent
-2. Clarify ambiguities (or use Codex Co-Decision — see `codex-protocol.md`)
-3. ID minimum viable change
-4. Determine truly independent (parallelizable) vs. coupled (sequential) tasks
-5. **Detect branch protection:**
+3. Clarify ambiguities (or use Codex Co-Decision — see `codex-protocol.md`)
+4. **Lock Run Contract when required:** durable, high-risk, whole-flow, long-running, or ambiguous-high-risk tasks must define `Goal / Success criteria / Stop condition / Boundaries / Verification risk` before the Execution Plan. If the user already supplied those fields, summarize them; ask only for missing hard-stop fields.
+5. ID minimum viable change
+6. Determine truly independent (parallelizable) vs. coupled (sequential) tasks
+7. **Detect branch protection:**
    ```bash
    default_branch=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null)
    current_branch=$(git branch --show-current 2>/dev/null)
@@ -32,9 +39,9 @@ The full orchestration flow CC runs for any non-trivial task. Load this referenc
    ```
    - Protected → Plan must use `feature/<agent>-<desc>` branch; Integration ends with `gh pr create`, not direct push
    - Detection fails (no `gh` / no network) → assume possibly protected; prefer feature branch for any session touching multiple files
-6. Decide worktrees needed?
+8. Decide worktrees needed?
 
-Only then: produce Execution Plan.
+Only then: produce Route Brief + Execution Plan.
 
 For ambiguous/novel/high-stakes tasks, run `/co-think` first (see `thinking-decision.md`).
 
@@ -47,6 +54,16 @@ For ambiguous/novel/high-stakes tasks, run `/co-think` first (see `thinking-deci
 ## Execution Plan Format (Required Before Acting)
 
 ```
+### Route Brief
+
+Current state: <fuzzy idea | clear bug | draft plan | approved plan | changed code>
+Selected path: <direct | /co-think | /co-plan-review | dispatch | external handoff>
+Why: <one sentence>
+Bypassed/left behind: <stage - reason; stage - reason>
+Execution surface: <main session | Codex dispatch | CC dispatch | worker/subagent>
+Stop/continue point: <where this run pauses or what completion means>
+Proof expected: <commands, artifacts, screenshots, reports>
+
 ### Plan
 
 [Self] Task A — files: src/api/...              (orchestrator executes locally)
@@ -63,6 +80,9 @@ Subagents: yes/no → who, why
 Heartbeat: [enabled/disabled] for each dispatch task
 Verify: [test command or check]
 ```
+
+For tiny direct work, the Route Brief may be a single sentence. For high-risk or
+long-running tasks, include the Run Contract before the Route Brief.
 
 **Label resolution:** `[Self]` = current runtime executes. `[Dispatch:*]` = route to named agent. Labels resolved by `resolve_routing()` from `cross-harness.md` using capability matrix from `runtime-routing.md`. Same plan works from either CC or Codex runtime — labels are runtime-agnostic.
 
@@ -258,6 +278,25 @@ Full gates in `engineering-principles.md` + `maintainability-harness.md`. Applie
 
 ---
 
+## Optional External Handoff
+
+Use `harness-workflows.md` to decide whether to suggest or invoke an external
+workflow. External command surfaces are optional and must not be copied into
+this skill.
+
+| Handoff | Use when | Boundary |
+|---------|----------|----------|
+| `grill-me` / `office-hours` | Requirements, wedge, or product direction are unclear | Usually satisfied by `/co-think` unless the external skill is installed and requested |
+| `gstack autoplan` | A plan file exists and needs a review gauntlet | Review only; accepted decisions must be reconciled into the plan before execution |
+| `GSD` | Work is phase-based and needs discuss -> plan -> execute -> verify state | External handoff when installed; otherwise borrow only phase discipline |
+| `intuitive-flow` | Idea-to-execution needs durable source-of-truth routing | Borrow route/run-contract patterns inline unless explicitly invoked |
+| `roboharness` | Review needs compact metric/visual evidence | Borrow proof-pack closeout, not robotics-specific checks |
+
+If an external workflow actually runs, report its artifacts. If only the pattern
+was borrowed, label the output as this orchestration skill.
+
+---
+
 ## Integration Phase
 
 After both agents complete, output:
@@ -274,6 +313,20 @@ Maintainability violations: [none / list]
 Verdict: ready / needs-fix / codex-rejected
 ```
 
+For high-risk, long-running, visual, or hard-to-review work, append a Proof Pack:
+
+```
+### Proof Pack
+
+Goal: [contract goal or plan task]
+Changed files: [list]
+Commands run: [command -> pass/fail/notes]
+Artifacts: [screenshots, reports, logs, URLs, generated files]
+Evidence summary: [what proves it works]
+Risks/open questions: [none / list]
+Approval needed: [none / user must bless baseline/release/destructive action]
+```
+
 Steps:
 1. List all modified files — check overlaps
 2. Review Codex diff: unintended changes? excess scope? pre-existing dead code touched?
@@ -281,5 +334,6 @@ Steps:
 4. Check maintainability harness violations (see `maintainability-harness.md` §18 Hard Red Lines)
 5. Check new file/function sizes and nesting
 6. Run tests + lint + type check
-7. **Pre-push:** ask user — "是否需要触发一次全量代码审核？" before any git push
-8. Emit verdict
+7. Build Proof Pack when verification risk was medium/high or review evidence is not obvious from command output
+8. **Pre-push:** ask user — "是否需要触发一次全量代码审核？" before any git push
+9. Emit verdict

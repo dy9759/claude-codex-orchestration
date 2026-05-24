@@ -47,7 +47,7 @@ Orchestrator（谁是 runtime 谁做 orchestrator）
 ```
 Layer 1 — CLAUDE.md           全局最小规则，每机可不同        (~20 行)
 Layer 2 — SKILL.md            跨机一致的 router + 自持规则    (~83 行)
-Layer 3 — references/*.md     深度内容，按需懒加载            (16 files)
+Layer 3 — references/*.md     深度内容，按需懒加载            (17 files)
 Layer 4 — 项目 AGENTS.md      bootstrap 生成，项目特有        (~50 行)
 ```
 
@@ -70,7 +70,7 @@ Layer 4 — 项目 AGENTS.md      bootstrap 生成，项目特有        (~50 �
 1. **Pre-push gate** — 每次 `git push` 前问用户："是否需要触发一次全量代码审核？"
 2. **AGENTS.md write redirect** — 所有 agent 指令/规则/约定写入项目 AGENTS.md，永不 CLAUDE.md；CLAUDE.md 保持单行 `@AGENTS.md` 指针
 3. **Token Budget** — 内部通信压缩（`full` 默认：省冠词、碎句、短同义词）；代码块、安全警告、用户交付物不压
-4. **Execution Plan required** — 无 Plan 不写代码；每任务必带 `verify:` 步骤
+4. **Execution Plan required** — 无 Plan 不写代码；持久/高风险/全流程任务先锁 Run Contract；每任务必带 `verify:` 步骤
 5. **Single writer per file** — 同一文件同时只能一个 agent 写
 6. **Size limits** — 新文件 ≤ 500 行；函数 ≤ 80 行；嵌套 ≤ 3 层
 7. **Session Start (首次调用)** — 跑插件检测 + AGENTS.md bootstrap（各 one-shot）
@@ -90,6 +90,7 @@ SKILL.md 里的路由表，CC 根据任务匹配读哪个 reference：
 | Codex 完整协议（调用 + co-decision + 安全门 + 质量追踪）| `references/codex-protocol.md` | Codex 派发前 |
 | Gemini 集成（何时咨询 + 路由 + hook 配置）| `references/gemini-integration.md` | 前端/UI 可能需设计输入 |
 | 思考层（`/co-think` + `/co-plan-review`）| `references/thinking-decision.md` | 任务模糊/新颖 |
+| Harness 工作流（Run Contract / Route Brief / Proof Pack / 外部 handoff）| `references/harness-workflows.md` | 模糊、高验证风险、长任务或外部流程交接 |
 | 知识复利（`/co-compound` + `/co-sessions`）| `references/knowledge-compounding.md` | 解决非平凡问题后 |
 | 自我纠错（Layer 0–3）| `references/self-correction.md` | 会话结束 / skill 编辑 |
 | 跨 harness 配置 | `references/cross-harness.md` | Harness 迁移 |
@@ -192,8 +193,8 @@ Claude Code 会：
 ### 2. Token 预算
 三档内联压缩：`lite` / `full` / `ultra`。阶段化上下文阈值（Plan < 20% / 执行 < 60% / 集成 < 80% / Push < 90%）。Compact-guard 保护 5 关键状态。详见 `references/context-budget.md`。
 
-### 3. 规划与分派（v7 能力路由升级）
-Phase 0 理解 → Runtime 检测 + 可用 agent 探测 → Execution Plan 格式化（`[Self]`/`[Dispatch:CC]`/`[Dispatch:Codex]` 标签）→ 能力矩阵路由分派。
+### 3. 规划与分派（v10 Harness 工作流）
+Phase 0 理解 → 任务形状分类（清晰度 × 验证风险）→ 必要时先锁 Run Contract → Runtime 检测 + 可用 agent 探测 → Route Brief + Execution Plan（`[Self]`/`[Dispatch:CC]`/`[Dispatch:Codex]` 标签）→ 能力矩阵路由分派。
 
 **v7 核心变更：**
 - Plan 标签从 `[CC]`/`[Codex]` 改为 runtime-agnostic `[Self]`/`[Dispatch:*]`
@@ -206,8 +207,10 @@ Phase 0 理解 → Runtime 检测 + 可用 agent 探测 → Execution Plan 格�
 - **PRD-first Phase 0** — 用户 `@<md-file>` 引用的 PRD/设计文档优先完整读完再探索
 - **Branch 保护检测** — Phase 0 step 5 `gh api` 查默认分支 protection，Plan 预先走 feature branch + PR
 - **Three-stage subagent pattern**（superpowers 已装时）— ≥300 行/3+ 文件大任务用 implementer → spec-compliance-reviewer → code-quality-reviewer 三级；<100 行单 dispatch
+- **Run Contract / Route Brief / Proof Pack** — 从 intuitive-flow、roboharness、GSD/gstack 工作流吸收的轻量模式：先定义成功/停止条件，让跳过的阶段可见，末端用证据包收束
+- **Optional External Handoff** — `grill-me`、gstack、GSD、intuitive-flow、roboharness 只作为可选外部流程；默认借用纪律，不复制命令树
 
-详见 `references/workflow-core.md` + `references/codex-protocol.md`。
+详见 `references/workflow-core.md` + `references/harness-workflows.md` + `references/codex-protocol.md`。
 
 ### 4. 决策集中协议 🔥 v2026-04
 所有用户决策**前置到 Plan 确认** + **末端一次性汇总**。执行中只有 5 类硬阻塞（安全 BLOCKED / 数据丢失 / 越 scope / CRITICAL 颠覆 / 真阻塞）才打断。其他中途决策写入 `.decisions-pending` 队列，应用安全默认，末端汇总一轮回完。
@@ -227,13 +230,14 @@ Phase 0 理解 → Runtime 检测 + 可用 agent 探测 → Execution Plan 格�
 - **Codex Quality Tracking** — 滚动 20 次窗口，< 40% 成功率触发惩罚
 - **Graceful Degradation** — Codex/CC 缺失、未登录、超时或质量 hard-stop 时，按 fallback 路由本地执行，不伪造未咨询 agent 的观点
 - **Dispatch Security Gate** — DB/env/CI/密钥/强删/git 历史改写一律阻断
+- **Proof Pack Closeout** — 高风险、长任务、视觉/UI 或难从 diff 判断的任务，必须列出改动文件、命令、证据、风险和需用户批准项
 - **Task Board** — `.tasks/` 原子认领防双写
 - **Worktree** — `feature/<agent>-<desc>`，生命周期 ≤ 1–3 天
 
 详见 `references/codex-protocol.md` + `references/workflow-core.md`。
 
 ### 6. 思考与决策
-- `/co-think` — 产品/技术双模式前置思考（5/4 问一问一答 + Premise Challenge + 可选 Codex cold read）
+- `/co-think` — grill/office-hours 风格前置思考；先读 repo/docs，再按产品/技术/领域文档三类只问用户真正拥有的决策（一问一答 + Premise Challenge + 可选 Codex cold read）
 - `/co-plan-review` — CEO 级 Plan 审核（EXPAND/SELECTIVE/HOLD/REDUCE 四模式 + 7 条 Prime Directives）
 
 详见 `references/thinking-decision.md`。
@@ -287,7 +291,7 @@ Phase 0 理解 → Runtime 检测 + 可用 agent 探测 → Execution Plan 格�
 
 **为什么 README 同步作为 Layer 0 的第一步？** README 跟 SKILL.md 脱节是用户对 doc 失去信任的首号原因；锁步更新在单个 commit 内完成，避免 GitHub 上出现"半更新"中间态。
 
-**当前分数：83.2/100**（`c2b8283`，从 baseline 72.0 爬到 83.2 共 5 次正向修改）。
+**当前分数：89.3/100**（v10，Run Contract / Route Brief / Proof Pack + `/co-think` source-first 分类）。
 
 #### Layer 1 — Session Self-Eval `/co-eval`
 会话结束双轴评分（Ambition × Execution），3×3 锁定矩阵出分 1–5，Devil's Advocate 强制论证，防通胀检测。写 `.eval-scores.jsonl`。
@@ -479,6 +483,10 @@ Skill 本身是 git 仓库（clone 自 `dy9759/claude-codex-orchestration`）。
 | `HKUDS/OpenSpace: security` | 派发安全门（危险模式检测、范围执行、用户确认门控）|
 | `openai/codex-plugin-cc` | Codex 调用协议（fg/bg、resume、effort、XML prompt）|
 | `EveryInc/compound-engineering-plugin` | 知识复利 4-subagent 流水线 |
+| `MiaoDX/intuitive-flow` | Run Contract、Route Brief、Source of Truth、worker handoff |
+| `MiaoDX/roboharness` | contract-before-prompt、Proof Pack、AMBIGUOUS 不自升 PASS |
+| `mattpocock/skills: grill-me / grill-with-docs` | source-first 提问、一次一个问题、领域语言校准 |
+| `get-shit-done-redux` | discuss → plan → execute → verify 阶段纪律 |
 | `garrytan/gstack: office-hours` | 产品/技术双模式前置思考 |
 | `garrytan/gstack: plan-ceo-review` | CEO 级 4 模式计划审核 + Prime Directives |
 | `obra/superpowers` | 跨 harness 插件结构、skill 组织、router + references 模式 |
@@ -502,6 +510,7 @@ Skill 本身是 git 仓库（clone 自 `dy9759/claude-codex-orchestration`）。
 | v8 (Codex runtime hardening) | Codex Desktop 检测 + AGENTS managed block + `/co-*` Codex 等价触发 + portable timeout + 高风险策略统一 | **86.1** |
 | v9 (operational fallback) | 可执行 runtime/agent 探测脚本 + Codex/CC 不可用降级 + Co-Decision 时间预算 + v8 分数下降说明 | **88.3** |
 | v9.1 (README quickstart sync) | README 增加 Codex 项目安装、runtime 探测、路由验证和 fallback 结果说明 | **88.5** |
+| v10 (harness workflow P0-P2) | Run Contract + Route Brief + Proof Pack closeout + `/co-think` grill/office-hours 分类 + 可选 GSD/gstack/intuitive-flow/roboharness handoff | **89.3** |
 
 v8 分数低于 v7 的原因：v7 的 91.1 偏设计乐观，v8 按实际 Codex Desktop 安装、AGENTS 自动引用、`/co-*` 等价触发、macOS timeout 和高风险策略重新验证后，暴露出 validation/executability 仍不足；v9 先补可执行探测和降级规则，而不是扩大架构范围。
 

@@ -22,7 +22,7 @@ These hold regardless of what's in the host machine's CLAUDE.md:
 1. **Pre-push gate** — before any `git push`, ask user: `"是否需要触发一次全量代码审核？"`
 2. **AGENTS.md write redirect** — all agent instructions / rules / conventions go to **project `AGENTS.md`**, never `CLAUDE.md`. CLAUDE.md stays as single-line `@AGENTS.md` pointer. Exception: modifying the pointer itself.
 3. **Token Budget** — agent-internal comms compressed (`full` default: drop articles, fragments OK, short synonyms). Never compress: code blocks, security warnings, user deliverables. User can say "switch to lite/ultra".
-4. **Execution Plan required** — never write code without a Plan confirmed by user. Every task has explicit `verify:` step.
+4. **Execution Plan required** — never write code without a Plan confirmed by user. For durable/high-risk/whole-flow tasks, lock a Run Contract first. Every task has explicit `verify:` step.
 5. **Single writer per file** — never assign same file to both agents simultaneously.
 6. **Size limits** — new files ≤ 500 lines; functions ≤ 80 lines; nesting ≤ 3 levels. Flag violations at integration.
 7. **Session Start (first invocation)** — run `session-start.md` protocol: (1) optional plugin detection, (2) AGENTS.md bootstrap, (3) global `~/.claude/CLAUDE.md` §5.2 auto-seed + version check, (4) skill self-update check (every 3 days, `git fetch origin main` + offer pull if behind), (5) escalation queue flush, (6) sub-skill install check (seed `/co-*` registered commands from `sub-skills/` if missing). All gated by sentinels; silent after first effective run.
@@ -45,7 +45,8 @@ Deep content lives in `references/` — load **only when needed** by task type. 
 | **Decision protocol** (pre-flight batching + mid-execution queue + end-of-plan consolidated review + Priority 1–4 cascade) | `references/decision-protocol.md` | Plan has multiple anticipated user decisions; between-tasks priority flow |
 | **Codex full protocol** (invocation + co-decision + security gate + quality tracking + task board) | `references/codex-protocol.md` | Before any Codex dispatch |
 | **Gemini integration** (when/how to consult + routing vs Codex + hook config) | `references/gemini-integration.md` | Frontend/UI task that may need design input |
-| **Thinking layer** (`/co-think` office-hours + `/co-plan-review` CEO review) | `references/thinking-decision.md` | Ambiguous/novel task before Plan; CEO-mode plan critique |
+| **Thinking layer** (`/co-think` grill/office-hours + `/co-plan-review` CEO review) | `references/thinking-decision.md` | Ambiguous/novel task before Plan; CEO-mode plan critique |
+| **Harness workflows** (clarity × verification risk, Run Contract, Route Brief, Proof Pack, optional GSD/gstack/intuitive-flow/roboharness handoff) | `references/harness-workflows.md` | Fuzzy, high-verification-risk, long-running, or external-handoff tasks |
 | **Knowledge compounding** (`/co-compound` 4-subagent pipeline + `/co-sessions` cross-session search) | `references/knowledge-compounding.md` | After resolving non-trivial problem; before complex work to check history |
 | **Self-correction** (3-layer eval/capture/promote + `/co-eval` `/co-review` `/co-promote` `/co-loop`) | `references/self-correction.md` | Session end; every 5 sessions; autonomous refinement |
 | **Cross-harness setup** (CC/Cursor/Codex/OpenCode config maps + hook translation) | `references/cross-harness.md` | Harness migration; setting up new project |
