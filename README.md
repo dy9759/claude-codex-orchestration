@@ -47,7 +47,7 @@ Orchestrator（谁是 runtime 谁做 orchestrator）
 ```
 Layer 1 — CLAUDE.md           全局最小规则，每机可不同        (~20 行)
 Layer 2 — SKILL.md            跨机一致的 router + 自持规则    (~83 行)
-Layer 3 — references/*.md     深度内容，按需懒加载            (17 files)
+Layer 3 — references/*.md     深度内容，按需懒加载            (18 files)
 Layer 4 — 项目 AGENTS.md      bootstrap 生成，项目特有        (~50 行)
 ```
 
@@ -70,7 +70,7 @@ Layer 4 — 项目 AGENTS.md      bootstrap 生成，项目特有        (~50 �
 1. **Pre-push gate** — 每次 `git push` 前问用户："是否需要触发一次全量代码审核？"
 2. **AGENTS.md write redirect** — 所有 agent 指令/规则/约定写入项目 AGENTS.md，永不 CLAUDE.md；CLAUDE.md 保持单行 `@AGENTS.md` 指针
 3. **Token Budget** — 内部通信压缩（`full` 默认：省冠词、碎句、短同义词）；代码块、安全警告、用户交付物不压
-4. **Execution Plan required** — 无 Plan 不写代码；持久/高风险/全流程任务先锁 Run Contract；每任务必带 `verify:` 步骤
+4. **Execution Plan required** — 无 Plan 不写代码；持久/高风险/全流程任务先锁 Run Contract；每个非平凡任务必带 Test Plan
 5. **Single writer per file** — 同一文件同时只能一个 agent 写
 6. **Size limits** — 新文件 ≤ 500 行；函数 ≤ 80 行；嵌套 ≤ 3 层
 7. **Session Start (首次调用)** — 跑插件检测 + AGENTS.md bootstrap（各 one-shot）
@@ -95,6 +95,7 @@ SKILL.md 里的路由表，CC 根据任务匹配读哪个 reference：
 | 自我纠错（Layer 0–3）| `references/self-correction.md` | 会话结束 / skill 编辑 |
 | 跨 harness 配置 | `references/cross-harness.md` | Harness 迁移 |
 | 工程原则（Hyrum/Beyoncé/Chesterton 等）| `references/engineering-principles.md` | 集成审查 |
+| 测试质量（Test Plan / 变更类型矩阵 / test-quality review / no-test exception）| `references/testing-quality.md` | 行为变更、bug 修复、测试改动或验证证据 |
 | 维护性规范（20 节 + Hard Red Lines）| `references/maintainability-harness.md` | 每次 Codex 派发 / AGENTS.md seed |
 | UI 样式规范（shadcn + radix-nova）| `references/ui-style-standard.md` | 任何前端任务 |
 | 上下文预算（+ Smart Tool RAG）| `references/context-budget.md` | 上下文 > 60% 或卡住 |
@@ -175,7 +176,7 @@ bash /Users/chauncey2025/Documents/GitHub/claude-codex-orchestration/sub-skills/
 Claude Code 会：
 1. Session Start 自动 bootstrap（插件检测 + AGENTS.md 迁移，首次会话仅一次）
 2. Phase 0 探索仓库 + 理解需求
-3. 输出 Execution Plan（含分工 + verify:）
+3. 输出 Execution Plan（含分工 + Test Plan）
 4. **Pre-flight 批量决策**（一次性问完所有预判决策）
 5. 并行执行（期间只有硬阻塞才打断你）
 6. **末端统一汇总**（队列决策 + 未决 issue + 下一 milestone → 一轮回完）
@@ -245,7 +246,8 @@ Phase 0 理解 → 任务形状分类（清晰度 × 验证风险）→ 必要�
 ### 7. 工程原则 + 维护性规范
 - **Common Rationalizations** — 7+ 条开发借口强制拒绝
 - **Hyrum's Law** — API surface 改动强制 gate
-- **Beyoncé Rule + Test Pyramid** — 测试金字塔 80/15/5
+- **Beyoncé Rule + Test Pyramid** — 测试金字塔 80/15/5；测试本身也按可维护代码审查
+- **Testing Quality Gates** — 非平凡改动用 Test Plan 替代泛泛 `verify:`：变更类型、自动化命令、预期失败信号、手动证据、未测风险
 - **Change Sizing** — 100/300/1000 行阈值 + Five-Axis Review
 - **Chesterton's Fence** — 删除前先理解
 - **Trunk-Based Dev** — 分支 ≤ 1–3 天
@@ -253,7 +255,7 @@ Phase 0 理解 → 任务形状分类（清晰度 × 验证风险）→ 必要�
 - **Deprecation Protocol** — Advisory/Compulsory + Strangler/Adapter/Flag
 - **Maintainability Harness 20 节** — 文件/函数/嵌套/命名/Rule of 3/类型/错误/配置/依赖/Hard Red Lines
 
-详见 `references/engineering-principles.md` + `references/maintainability-harness.md`。
+详见 `references/engineering-principles.md` + `references/testing-quality.md` + `references/maintainability-harness.md`。
 
 ### 7.5. UI 样式规范
 **硬默认：** shadcn/ui + `"style": "radix-nova"` + `baseColor: neutral` + `iconLibrary: lucide`。
@@ -291,7 +293,7 @@ Phase 0 理解 → 任务形状分类（清晰度 × 验证风险）→ 必要�
 
 **为什么 README 同步作为 Layer 0 的第一步？** README 跟 SKILL.md 脱节是用户对 doc 失去信任的首号原因；锁步更新在单个 commit 内完成，避免 GitHub 上出现"半更新"中间态。
 
-**当前分数：89.3/100**（v10，Run Contract / Route Brief / Proof Pack + `/co-think` source-first 分类）。
+**当前分数：90.7/100**（v11，Google eng-practices 风格 Test Plan + 测试质量审查）。
 
 #### Layer 1 — Session Self-Eval `/co-eval`
 会话结束双轴评分（Ambition × Execution），3×3 锁定矩阵出分 1–5，Devil's Advocate 强制论证，防通胀检测。写 `.eval-scores.jsonl`。
@@ -483,6 +485,7 @@ Skill 本身是 git 仓库（clone 自 `dy9759/claude-codex-orchestration`）。
 | `HKUDS/OpenSpace: security` | 派发安全门（危险模式检测、范围执行、用户确认门控）|
 | `openai/codex-plugin-cc` | Codex 调用协议（fg/bg、resume、effort、XML prompt）|
 | `EveryInc/compound-engineering-plugin` | 知识复利 4-subagent 流水线 |
+| `google/eng-practices` | 测试随变更提交、测试本身要 review、UI/并发变更需更强验证 |
 | `MiaoDX/intuitive-flow` | Run Contract、Route Brief、Source of Truth、worker handoff |
 | `MiaoDX/roboharness` | contract-before-prompt、Proof Pack、AMBIGUOUS 不自升 PASS |
 | `mattpocock/skills: grill-me / grill-with-docs` | source-first 提问、一次一个问题、领域语言校准 |
@@ -511,6 +514,7 @@ Skill 本身是 git 仓库（clone 自 `dy9759/claude-codex-orchestration`）。
 | v9 (operational fallback) | 可执行 runtime/agent 探测脚本 + Codex/CC 不可用降级 + Co-Decision 时间预算 + v8 分数下降说明 | **88.3** |
 | v9.1 (README quickstart sync) | README 增加 Codex 项目安装、runtime 探测、路由验证和 fallback 结果说明 | **88.5** |
 | v10 (harness workflow P0-P2) | Run Contract + Route Brief + Proof Pack closeout + `/co-think` grill/office-hours 分类 + 可选 GSD/gstack/intuitive-flow/roboharness handoff | **89.3** |
+| v11 (testing quality gates) | 新增 Test Plan、变更类型测试矩阵、test-quality review、no-test exception，并接入 Codex/AGENTS/Proof Pack | **90.7** |
 
 v8 分数低于 v7 的原因：v7 的 91.1 偏设计乐观，v8 按实际 Codex Desktop 安装、AGENTS 自动引用、`/co-*` 等价触发、macOS timeout 和高风险策略重新验证后，暴露出 validation/executability 仍不足；v9 先补可执行探测和降级规则，而不是扩大架构范围。
 

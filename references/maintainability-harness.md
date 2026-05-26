@@ -138,6 +138,8 @@ Techniques to flatten:
 - Tests verify behavior, not implementation trivia
 - Prefer small focused tests over broad fragile ones
 - Cover: expected path, edge cases, failure path for critical logic
+- Review tests as maintained code: meaningful assertions, deterministic setup, no masking failures, no weakened expectations without rationale
+- Use `testing-quality.md` for change-type test selection and no-test exceptions
 
 ## 13. Observability
 

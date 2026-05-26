@@ -78,7 +78,7 @@ Dispatch:Codex owns: [files routed to Codex by capability matrix]
 Worktrees: yes/no → branches + owners
 Subagents: yes/no → who, why
 Heartbeat: [enabled/disabled] for each dispatch task
-Verify: [test command or check]
+Test Plan: [commands, expected failure signal, manual evidence, not-tested rationale]
 ```
 
 For tiny direct work, the Route Brief may be a single sentence. For high-risk or
@@ -270,7 +270,7 @@ Full gates in `engineering-principles.md` + `maintainability-harness.md`. Applie
 
 - **Scope:** minimum viable; no speculative features
 - **Surgical changes:** Codex removes only orphans its own changes created
-- **Verify step required:** every task has explicit `verify: [command]`
+- **Test Plan required:** non-trivial tasks name commands, expected failure signal, manual evidence, and any no-test exception (see `testing-quality.md`)
 - **Size gates:** new file < 500 lines (hard warn), function < 80 lines (hard warn), nesting ≤ 3
 - **Maintainability:** no magic values, no silent errors, no unnecessary deps, Rule of 3 for duplication
 - **Hyrum's Law** on API surface, **Beyoncé Rule** for tests, **Chesterton's Fence** before deletions
@@ -308,6 +308,7 @@ Modified: [file list]
 Overlaps: [none / list conflicts]
 Regressions: [none / describe]
 Tests: [pass/fail summary]
+Test quality: [reviewed / gaps]
 Size violations: [none / new files >500 lines, functions >80 lines, nesting >3]
 Maintainability violations: [none / list]
 Verdict: ready / needs-fix / codex-rejected
@@ -321,6 +322,7 @@ For high-risk, long-running, visual, or hard-to-review work, append a Proof Pack
 Goal: [contract goal or plan task]
 Changed files: [list]
 Commands run: [command -> pass/fail/notes]
+Test quality review: [what proves tests would catch the target failure]
 Artifacts: [screenshots, reports, logs, URLs, generated files]
 Evidence summary: [what proves it works]
 Risks/open questions: [none / list]
@@ -334,6 +336,7 @@ Steps:
 4. Check maintainability harness violations (see `maintainability-harness.md` §18 Hard Red Lines)
 5. Check new file/function sizes and nesting
 6. Run tests + lint + type check
-7. Build Proof Pack when verification risk was medium/high or review evidence is not obvious from command output
-8. **Pre-push:** ask user — "是否需要触发一次全量代码审核？" before any git push
-9. Emit verdict
+7. Apply `testing-quality.md`: check test type matches change type, tests would fail for the right broken behavior, and no-test exceptions are explicit
+8. Build Proof Pack when verification risk was medium/high or review evidence is not obvious from command output
+9. **Pre-push:** ask user — "是否需要触发一次全量代码审核？" before any git push
+10. Emit verdict

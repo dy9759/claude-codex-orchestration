@@ -7,7 +7,7 @@ Drop-in minimal global instructions for `~/.claude/CLAUDE.md`. Works on any mach
 1. **State assumptions** explicitly. Ask when uncertain. Surface tradeoffs.
 2. **Simplicity first** — minimum code, no speculative features, no single-use abstractions.
 3. **Surgical changes** — only what the task needs. Match existing project style.
-4. **Verify goals** — every task has a concrete `verify:` step.
+4. **Verify goals** — every non-trivial task has a concrete Test Plan.
 
 ## Hard limits (new files only)
 
@@ -29,7 +29,7 @@ Invoke the `claude-codex-orchestration` skill whenever the task matches its trig
 - Cross-agent dispatch with heartbeat monitoring
 - Pre-task thinking via `/co-think`
 - Strategic plan review via `/co-plan-review`
-- Engineering principles enforcement (Hyrum, Beyoncé, Chesterton, trunk-based, shift-left, feature flags, deprecation, maintainability harness)
+- Engineering principles enforcement (Hyrum, Beyoncé, Chesterton, trunk-based, shift-left, feature flags, deprecation, maintainability harness, testing quality)
 - UI style standard (shadcn/radix-nova)
 - Knowledge compounding
 

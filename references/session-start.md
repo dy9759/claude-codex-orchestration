@@ -100,6 +100,7 @@ agents_bootstrap() {
 - No silent error swallowing.
 - No unnecessary dependencies.
 - New logic requires tests.
+- Test changes must prove behavior, not mask failures.
 - Read existing code before writing new code.
 - Match project conventions.
 - Make the smallest maintainable change.
@@ -122,14 +123,14 @@ Task routing follows capability matrix (`runtime-routing.md`), not runtime ident
 - `rm -rf` / force-delete operations
 - Git history rewrites (rebase -i, reset --hard, push --force)
 
-Do not auto-dispatch these across agents. The current orchestrator keeps ownership, writes a plan with rollback/verify steps, and asks explicit approval before execution.
+Do not auto-dispatch these across agents. The current orchestrator keeps ownership, writes a plan with rollback/Test Plan steps, and asks explicit approval before execution.
 
 ### Workflow
 
 1. Plan → split CC/Codex ownership cleanly
 2. Parallel execute in worktrees if needed (`feature/<agent>-<desc>`)
 3. Integrate once — single writer per file at any moment
-4. Verify: tests + lint + type check before push
+4. Verify: Test Plan + tests + lint + type check before push
 
 ### Next-Step Decision Flow (between tasks)
 
@@ -163,6 +164,7 @@ After each task completes, run priority cascade:
 
 - Skill: `~/.claude/skills/claude-codex-orchestration/SKILL.md`
 - Maintainability harness: `~/.claude/skills/claude-codex-orchestration/references/maintainability-harness.md`
+- Testing quality: `~/.claude/skills/claude-codex-orchestration/references/testing-quality.md`
 - UI style standard: `~/.claude/skills/claude-codex-orchestration/references/ui-style-standard.md`
 - Gemini integration (frontend specialist): `~/.claude/skills/claude-codex-orchestration/references/gemini-integration.md`
 - Solved problems (if present): `docs/solutions/`

@@ -22,7 +22,7 @@ These hold regardless of what's in the host machine's CLAUDE.md:
 1. **Pre-push gate** — before any `git push`, ask user: `"是否需要触发一次全量代码审核？"`
 2. **AGENTS.md write redirect** — all agent instructions / rules / conventions go to **project `AGENTS.md`**, never `CLAUDE.md`. CLAUDE.md stays as single-line `@AGENTS.md` pointer. Exception: modifying the pointer itself.
 3. **Token Budget** — agent-internal comms compressed (`full` default: drop articles, fragments OK, short synonyms). Never compress: code blocks, security warnings, user deliverables. User can say "switch to lite/ultra".
-4. **Execution Plan required** — never write code without a Plan confirmed by user. For durable/high-risk/whole-flow tasks, lock a Run Contract first. Every task has explicit `verify:` step.
+4. **Execution Plan required** — never write code without a Plan confirmed by user. For durable/high-risk/whole-flow tasks, lock a Run Contract first. Every non-trivial task has a Test Plan.
 5. **Single writer per file** — never assign same file to both agents simultaneously.
 6. **Size limits** — new files ≤ 500 lines; functions ≤ 80 lines; nesting ≤ 3 levels. Flag violations at integration.
 7. **Session Start (first invocation)** — run `session-start.md` protocol: (1) optional plugin detection, (2) AGENTS.md bootstrap, (3) global `~/.claude/CLAUDE.md` §5.2 auto-seed + version check, (4) skill self-update check (every 3 days, `git fetch origin main` + offer pull if behind), (5) escalation queue flush, (6) sub-skill install check (seed `/co-*` registered commands from `sub-skills/` if missing). All gated by sentinels; silent after first effective run.
@@ -51,6 +51,7 @@ Deep content lives in `references/` — load **only when needed** by task type. 
 | **Self-correction** (3-layer eval/capture/promote + `/co-eval` `/co-review` `/co-promote` `/co-loop`) | `references/self-correction.md` | Session end; every 5 sessions; autonomous refinement |
 | **Cross-harness setup** (CC/Cursor/Codex/OpenCode config maps + hook translation) | `references/cross-harness.md` | Harness migration; setting up new project |
 | **Engineering principles** (Hyrum, Beyoncé, Test Pyramid, Chesterton, Trunk-based, Shift Left, Feature Flags, Deprecation, Change Sizing, Common Rationalizations) | `references/engineering-principles.md` | Integration review; every Codex task gate |
+| **Testing quality** (Test Plan, change-type matrix, test-quality review, no-test exceptions) | `references/testing-quality.md` | Behavior changes, bug fixes, test edits, or verification evidence |
 | **Maintainability harness** (20-section spec: file size, function size, nesting, naming, Rule of 3, typed interfaces, error handling, deps, Hard Red Lines) | `references/maintainability-harness.md` | Seeds AGENTS.md Non-Negotiable Rules; enforced at integration |
 | **UI style standard** (shadcn/radix-nova default `components.json` + secondary style library + webpage style extraction + frontend Hard Red Lines) | `references/ui-style-standard.md` | Any frontend work; "make it look like [URL]" requests |
 | **Runtime routing** (capability matrix + routing algorithm + cross-agent invocation + plan labels) | `references/runtime-routing.md` | Any task dispatch; runtime is not CC; planning agent assignment |

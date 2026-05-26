@@ -54,7 +54,7 @@ Codex prompts use XML block structure, not caveman prose. Prompt Codex like an *
 </default_follow_through_policy>
 
 <!-- Add only what the task needs: -->
-<verification_loop>Required for implementation/debug — run tests, verify fix.</verification_loop>
+<verification_loop>Required for implementation/debug — provide Test Plan, run tests, verify fix, review test quality.</verification_loop>
 <grounding_rules>Required for review — cite file+line, no unsupported claims.</grounding_rules>
 <action_safety>For write-capable runs — stay narrow, avoid unrelated refactors.</action_safety>
 ```
@@ -64,7 +64,8 @@ Checklist before sending:
 2. Smallest output contract that makes the answer usable
 3. Add `<verification_loop>` for any implementation task
 4. Add `<grounding_rules>` for any review task
-5. Remove redundant instructions — prefer tighter contracts over longer prose
+5. For behavior changes or test edits, apply `testing-quality.md` in the output contract
+6. Remove redundant instructions — prefer tighter contracts over longer prose
 
 **Token rule:** Final prompt <200 words. If over, remove redundant instructions first; compress prose only as last resort.
 
@@ -164,7 +165,7 @@ Scope: [declared files]
 Verdict: safe-to-dispatch / requires-confirmation / blocked
 ```
 
-If `blocked`: rewrite task spec to remove the blocked operation. Keep the blocked work with the current orchestrator, require explicit user approval, and include rollback/verify steps before any execution.
+If `blocked`: rewrite task spec to remove the blocked operation. Keep the blocked work with the current orchestrator, require explicit user approval, and include rollback/Test Plan steps before any execution.
 If `requires-confirmation`: pause, show warning in full (not caveman), wait for user yes/no.
 
 ---

@@ -125,7 +125,7 @@ claude -p "<task prompt>" --output-format json --max-budget-usd 5 \
 Task: [concrete job + done-state]
 Scope: [file paths]
 Off-limits: [paths CC must not touch]
-Verify: [test command or check]
+Test Plan: [command + expected failure signal]
 Output: [expected deliverables]
 Budget: $[N] max
 ```

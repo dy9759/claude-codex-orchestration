@@ -186,7 +186,7 @@ Record the issue number in the Execution Plan's `Deferred` section so it doesn't
 
 ### Priority 3 — Next task from Execution Plan
 
-Pick the next incomplete item. Announce: "Next: [task]. Verify: [command]."
+Pick the next incomplete item. Announce: "Next: [task]. Test Plan: [command + expected failure signal]."
 
 ### Priority 4 — Plan Complete → End-of-Plan Consolidated Review
 

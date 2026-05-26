@@ -35,8 +35,8 @@ Task: [concrete job description + explicit done-state]
 Scope: [file paths this task touches]
 Off-limits: [paths CC must not modify]
 Context: [relevant background — keep under 100 words]
-Verify: [command to confirm success]
-Output: [expected deliverables — files changed, test results]
+Test Plan: [command + expected failure signal]
+Output: [expected deliverables — files changed, test results, test-quality review]
 ```
 
 ### Budget Guidelines
@@ -66,7 +66,7 @@ Self owns: bounded backend modules, scripts, isolated fixes
 CC owns: frontend, cross-cutting, architecture review, integration support
 High-risk ops: current orchestrator owns after explicit approval
 
-Verify: [test command]
+Test Plan: [command + expected failure signal]
 ```
 
 **Resolution:** `[Self]` = Codex local. `[Dispatch:CC]` = invoke `claude -p`. Routing resolved by `resolve_routing()` from `cross-harness.md`.
@@ -158,7 +158,7 @@ Mirror of `.codex-quality.jsonl` for CC dispatches:
 Same blocked patterns as `codex-protocol.md` §Dispatch Security Gate apply in Codex runtime, but the ownership language changes from "assign to CC" to "keep with the current orchestrator unless the user explicitly routes it elsewhere."
 
 - DB migrations, env/secrets, package manifests, CI/CD/release, destructive file/git operations → no automatic cross-agent dispatch
-- The current orchestrator writes a plan, risk list, rollback/verify step, and asks for explicit approval
+- The current orchestrator writes a plan, risk list, rollback/Test Plan step, and asks for explicit approval
 - CC may be used for read-only review or planning if available
 - Implementation happens locally only after approval, unless the user explicitly says to route it to CC
 
