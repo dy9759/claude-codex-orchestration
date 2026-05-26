@@ -69,8 +69,8 @@ Codex should use the local orchestration bundle in `.codex/orchestration/`.
 - For task routing, read `.codex/orchestration/runtime-routing.md` and `.codex/orchestration/codex-runtime.md`.
 - For fuzzy, high-verification-risk, long-running, or external-handoff tasks, read `.codex/orchestration/harness-workflows.md` and use its Run Contract, Route Brief, and Proof Pack patterns.
 - For behavior changes, bug fixes, or test edits, read `.codex/orchestration/testing-quality.md` and provide a Test Plan plus test-quality review.
-- To detect runtime/agent availability, run `.codex/orchestration/bin/detect-orchestration-runtime.sh summary` and use `route <task-type>` for concrete routing decisions.
-- For cross-agent dispatch monitoring, use `.codex/orchestration/heartbeat-protocol.md`; use `.codex/orchestration/bin/run-with-timeout.sh` instead of assuming GNU `timeout` exists.
+- To detect runtime/agent availability, run `.codex/orchestration/bin/detect-orchestration-runtime.sh health` and `summary`; use `route <task-type>` for concrete routing decisions.
+- For background cross-agent dispatch monitoring, use `.codex/orchestration/bin/dispatch-with-heartbeat.sh`; for foreground timeout-only runs, use `.codex/orchestration/bin/run-with-timeout.sh` instead of assuming GNU `timeout` exists.
 - For high-risk work (DB migrations, env/secrets, package manifests, CI/CD/release, destructive git/file ops), do not auto-dispatch. Produce a plan, ask for explicit approval, and keep execution with the current orchestrator unless the user explicitly routes it elsewhere.
 
 Codex command equivalents:

@@ -100,7 +100,7 @@ SKILL.md 里的路由表，CC 根据任务匹配读哪个 reference：
 | UI 样式规范（shadcn + radix-nova）| `references/ui-style-standard.md` | 任何前端任务 |
 | 上下文预算（+ Smart Tool RAG）| `references/context-budget.md` | 上下文 > 60% 或卡住 |
 | 能力矩阵路由（runtime-agnostic 任务分配）| `references/runtime-routing.md` | 任何 task dispatch（v7）|
-| 心跳协议（3 级检测 + fallback 状态机）| `references/heartbeat-protocol.md` | 跨 agent dispatch 时（v7）|
+| 心跳协议（可执行 helper + fallback 状态机）| `references/heartbeat-protocol.md` | 跨 agent dispatch 时（v7）|
 | Codex 主 runtime 协议（CC dispatch + sub-skill 兼容）| `references/codex-runtime.md` | Codex 作为 orchestrator 时（v7）|
 
 ---
@@ -116,7 +116,15 @@ git clone https://github.com/dy9759/claude-codex-orchestration \
 
 **跨机部署：** 复制 `CLAUDE.md.template`（仓库根，20 行）到 `~/.claude/CLAUDE.md`，触发 `§Preferred skill` 规则自动调用本 skill。其他机器用户无需手动复制全部规则。
 
-**Codex 作为 orchestrator：** 运行 `bash sub-skills/install-codex.sh [project-root]`。脚本会把 `SKILL.md`、全部 references、`/co-*` 等价命令说明、runtime/agent 探测脚本和 portable timeout wrapper 复制到 `.codex/orchestration/`，并在项目 `AGENTS.md` 写入 managed block，让 Codex 能自动发现本 skill。
+**Codex 作为 orchestrator：** 运行 `bash sub-skills/install-codex.sh [project-root]`。脚本会把 `SKILL.md`、全部 references、`/co-*` 等价命令说明、runtime/agent 探测脚本、heartbeat helper 和 portable timeout wrapper 复制到 `.codex/orchestration/`，并在项目 `AGENTS.md` 写入 managed block，让 Codex 能自动发现本 skill。
+
+安装后验证：
+
+```bash
+.codex/orchestration/bin/detect-orchestration-runtime.sh health
+.codex/orchestration/bin/detect-orchestration-runtime.sh summary
+.codex/orchestration/bin/detect-orchestration-runtime.sh route bug-fix
+```
 
 **Claude Code runtime 必需：**
 - Claude Code CLI
@@ -293,7 +301,7 @@ Phase 0 理解 → 任务形状分类（清晰度 × 验证风险）→ 必要�
 
 **为什么 README 同步作为 Layer 0 的第一步？** README 跟 SKILL.md 脱节是用户对 doc 失去信任的首号原因；锁步更新在单个 commit 内完成，避免 GitHub 上出现"半更新"中间态。
 
-**当前分数：90.7/100**（v11，Google eng-practices 风格 Test Plan + 测试质量审查）。
+**当前分数：92.6/100**（v12，真实 heartbeat helper + auth health probe + §5.2 v3 同步）。
 
 #### Layer 1 — Session Self-Eval `/co-eval`
 会话结束双轴评分（Ambition × Execution），3×3 锁定矩阵出分 1–5，Devil's Advocate 强制论证，防通胀检测。写 `.eval-scores.jsonl`。
@@ -418,7 +426,7 @@ bash ~/.claude/skills/claude-codex-orchestration/sub-skills/install.sh
 
 **Surgical Replacement 算法：** 用 awk 提取 "前半部分 + 新 §5.2 block + 后半部分"，preserve CLAUDE.md 其他内容完好；每次更新前自动建 `CLAUDE.md.bak-YYYYMMDD-HHMMSS` 时间戳备份。
 
-**当前 ship 版本：v1。** 升级 §5.2 内容时（新 trigger / 规则 / 结构变），同 commit 里 bump 版本号 + 更新 `CLAUDE.md.template`。
+**当前 ship 版本：v3。** 升级 §5.2 内容时（新 trigger / 规则 / 结构变），同 commit 里 bump 版本号 + 更新 `CLAUDE.md.template`。
 
 Sentinel: `~/.claude/.orch-claude-md-seeded`。重置：`rm` 这个文件即可重新走一轮检测。
 
@@ -448,7 +456,7 @@ Skill 本身是 git 仓库（clone 自 `dy9759/claude-codex-orchestration`）。
 **Sentinel：** `~/.claude/.orch-update-last-check`（timestamp）。
 **重置：** `rm ~/.claude/.orch-update-disabled`（重新启用）、`rm ~/.claude/.orch-auto-update`（切回提问模式）、`rm ~/.claude/.orch-update-last-check`（强制下次会话检查）。
 
-**与 §5.2 版本化联动：** pull 成功后，Part 3 会自动重新检查 §5.2 版本；如 skill 升级把 §5.2 从 v1 升到 v2，Part 3 会 offer surgical 更新用户的 CLAUDE.md。
+**与 §5.2 版本化联动：** pull 成功后，Part 3 会自动重新检查 §5.2 版本；如 skill 升级把 §5.2 从旧版本升到 v3，Part 3 会 offer surgical 更新用户的 CLAUDE.md。
 
 ---
 
@@ -515,6 +523,7 @@ Skill 本身是 git 仓库（clone 自 `dy9759/claude-codex-orchestration`）。
 | v9.1 (README quickstart sync) | README 增加 Codex 项目安装、runtime 探测、路由验证和 fallback 结果说明 | **88.5** |
 | v10 (harness workflow P0-P2) | Run Contract + Route Brief + Proof Pack closeout + `/co-think` grill/office-hours 分类 + 可选 GSD/gstack/intuitive-flow/roboharness handoff | **89.3** |
 | v11 (testing quality gates) | 新增 Test Plan、变更类型测试矩阵、test-quality review、no-test exception，并接入 Codex/AGENTS/Proof Pack | **90.7** |
+| v12 (heartbeat + auth health) | §5.2 升 v3；新增真实 `dispatch-with-heartbeat.sh`；runtime 可用性改为 version + auth health；Codex AGENTS block 同步 helper 用法 | **92.6** |
 
 v8 分数低于 v7 的原因：v7 的 91.1 偏设计乐观，v8 按实际 Codex Desktop 安装、AGENTS 自动引用、`/co-*` 等价触发、macOS timeout 和高风险策略重新验证后，暴露出 validation/executability 仍不足；v9 先补可执行探测和降级规则，而不是扩大架构范围。
 

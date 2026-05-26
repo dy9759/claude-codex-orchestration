@@ -172,16 +172,16 @@ Fold the three stages into one Codex spec via `<verification_loop>` + `<groundin
 - **Co-Decision:** route internal questions to Codex before asking user
 - **Security gate:** scan task spec, block DB/env/CI/secrets, confirm high-risk
 - **Quality tracking:** rolling 20-dispatch window in `.codex-quality.jsonl`
-- **Heartbeat:** background tasks auto-enable heartbeat monitoring (see `heartbeat-protocol.md`)
+- **Heartbeat:** background tasks launch through `dispatch-with-heartbeat.sh`; if the helper is unavailable, do not claim heartbeat monitoring (see `heartbeat-protocol.md`)
 
 ### Codex → CC (full protocol in `codex-runtime.md`)
 
 - **Mechanism:** `claude -p "<prompt>" --output-format json --max-budget-usd N`
 - **NL prompt format** (CC processes NL better than XML): Task + Scope + Off-limits + Verify + Output
 - **Budget control:** $2–$20 per dispatch, never exceed $20
-- **Timeout:** wrapped with `.codex/orchestration/bin/run-with-timeout.sh` or equivalent portable fallback
+- **Timeout:** foreground tasks wrapped with `.codex/orchestration/bin/run-with-timeout.sh` or equivalent portable fallback
 - **Quality tracking:** rolling 20-dispatch window in `.cc-quality.jsonl`
-- **Heartbeat:** same heartbeat protocol as CC → Codex dispatch
+- **Heartbeat:** background tasks use the same executable heartbeat helper as CC → Codex dispatch
 
 ---
 

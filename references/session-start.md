@@ -195,14 +195,15 @@ agents_bootstrap
 ### Version Constant (bump when §5.2 content changes materially)
 
 ```bash
-CURRENT_CLAUDE_MD_SECTION_VERSION=2
+CURRENT_CLAUDE_MD_SECTION_VERSION=3
 ```
 
 **Bump rule:** Increment this whenever the §5.2 block below gets a new trigger, a changed rule, or a structural edit. Do NOT bump for cosmetic changes. Bump goes in the same commit as the block change.
 
 **Version history:**
 - `v1` — 8 triggers incl. UI style, knowledge compounding, /co-think, /co-plan-review; "invoke the skill to check when in doubt" rule
-- `v2` (current) — hyphen `/co-*` command naming, runtime-agnostic routing, Codex AGENTS install/discovery, heartbeat fallback, unified high-risk approval rule
+- `v2` — hyphen `/co-*` command naming, runtime-agnostic routing, Codex AGENTS install/discovery, heartbeat fallback, unified high-risk approval rule
+- `v3` (current) — executable heartbeat helper, auth-aware runtime health probe, testing-quality trigger in §5.2
 
 ### Detection + Action Flow
 
@@ -210,7 +211,7 @@ CURRENT_CLAUDE_MD_SECTION_VERSION=2
 seed_global_claude_md() {
   local claude_md=~/.claude/CLAUDE.md
   local sentinel=~/.claude/.orch-claude-md-seeded
-  local current_version=2  # see Version Constant above
+  local current_version=3  # see Version Constant above
 
   # Case A: CLAUDE.md missing entirely or doesn't mention skill → offer to add
   if [ ! -f "$claude_md" ] || ! grep -q "claude-codex-orchestration" "$claude_md" 2>/dev/null; then
@@ -291,7 +292,7 @@ When user answers `y` to add or update, write this block (append for Case A, sur
 
 ```markdown
 
-### 5.2 Prefer `claude-codex-orchestration` Skill <!-- orch-skill-version: 2 -->
+### 5.2 Prefer `claude-codex-orchestration` Skill <!-- orch-skill-version: 3 -->
 
 **When a task matches the `claude-codex-orchestration` skill's triggers, invoke it first.**
 
@@ -301,10 +302,10 @@ Triggers (non-exhaustive):
 - Cross-harness setup (Cursor / Codex / OpenCode)
 - Runtime-agnostic capability routing (Claude Code or Codex as orchestrator)
 - Codex project install via `.codex/orchestration/` + AGENTS managed block
-- Cross-agent dispatch with heartbeat monitoring and portable timeout fallback
+- Cross-agent dispatch with executable heartbeat monitoring and portable timeout fallback
 - Pre-task thinking via `/co-think`
 - Strategic plan review via `/co-plan-review`
-- Engineering principles enforcement (Hyrum, Beyoncé, Chesterton, trunk-based, shift-left, feature flags, deprecation, maintainability harness)
+- Engineering principles enforcement (Hyrum, Beyoncé, Chesterton, trunk-based, shift-left, feature flags, deprecation, maintainability harness, testing quality)
 - UI style standard (shadcn/radix-nova)
 - Knowledge compounding (`/co-compound`, `/co-sessions`)
 
@@ -465,7 +466,7 @@ skill_update_check
 ### Interaction with Layer 0 / §5.2 versioning
 
 After a successful pull:
-- Session Start Part 3 will re-run → detect version delta if §5.2 block moved to v2 → offer CLAUDE.md update (surgical replacement)
+- Session Start Part 3 will re-run → detect version delta if §5.2 block moved to v3 → offer CLAUDE.md update (surgical replacement)
 - Layer 0 rubric didn't move; `.skill-scores.jsonl` from remote is merged (it's git-tracked and append-only, so conflicts are rare)
 
 ---
@@ -593,6 +594,7 @@ runtime_routing_setup() {
   # cross-harness.md shell functions when the bundle is not installed yet.
   if [ -x "$helper" ]; then
     harness="$("$helper" runtime)"
+    "$helper" health
     available="$("$helper" agents "$harness")"
   else
     harness="$(detect_harness)"

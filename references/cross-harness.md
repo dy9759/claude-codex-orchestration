@@ -95,33 +95,48 @@ Detect which agents are available for dispatch from the current runtime. Called 
 ```bash
 ./scripts/detect-orchestration-runtime.sh summary
 # runtime=codex
-# available_agents=codex cc
+# available_agents=cc codex
+
+./scripts/detect-orchestration-runtime.sh health
+# cc:version=ok auth=ok
+# codex:version=ok auth=ok
 
 ./scripts/detect-orchestration-runtime.sh route bug-fix
 # local:codex
 ```
 
-The shell functions below are the portable fallback/reference implementation. Keep behavior aligned with the script.
+The shell functions below are the portable fallback/reference implementation. Keep behavior aligned with the script: a peer agent is dispatchable only when both version and auth probes pass.
 
 ```bash
+version_ok() {
+  local cmd="$1"
+  command -v "$cmd" >/dev/null 2>&1 || return 1
+  "$cmd" --version >/dev/null 2>&1
+}
+
+auth_ok() {
+  case "$1" in
+    claude) claude auth status >/dev/null 2>&1 ;;
+    codex) codex login status >/dev/null 2>&1 ;;
+    *) return 1 ;;
+  esac
+}
+
+agent_ready() {
+  version_ok "$1" && auth_ok "$1"
+}
+
 detect_available_agents() {
   local agents=""
-  local runtime="$(detect_harness)"
-
-  case "$runtime" in
-    claude-code) agents="$agents cc" ;;
-    codex) agents="$agents codex" ;;
-  esac
 
   # CC available?
-  if command -v claude >/dev/null 2>&1; then
-    # Verify claude CLI responds (not just exists)
-    claude --version >/dev/null 2>&1 && agents="$agents cc"
+  if agent_ready claude; then
+    agents="$agents cc"
   fi
 
   # Codex available?
-  if command -v codex >/dev/null 2>&1; then
-    codex --version >/dev/null 2>&1 && agents="$agents codex"
+  if agent_ready codex; then
+    agents="$agents codex"
   fi
 
   # Gemini available? Direct from CC, relayed through CC from other runtimes.
@@ -211,8 +226,9 @@ resolve_routing() {
 
 **Usage at Phase 0:**
 ```bash
-RUNTIME="$(detect_harness)"
-AVAILABLE="$(detect_available_agents)"
+RUNTIME="$(./scripts/detect-orchestration-runtime.sh runtime)"
+AVAILABLE="$(./scripts/detect-orchestration-runtime.sh agents "$RUNTIME")"
+./scripts/detect-orchestration-runtime.sh health
 echo "Runtime: $RUNTIME | Available agents: $AVAILABLE"
 
 # Per-task example
@@ -220,6 +236,18 @@ resolve_routing "frontend" "$RUNTIME" "$AVAILABLE"
 # CC runtime, codex+gemini available → "local:cc" (CC preferred for frontend)
 # Codex runtime, cc+gemini available → "dispatch:cc" (CC preferred, dispatch)
 ```
+
+## Cross-Agent Dispatch Helpers
+
+Installed Codex bundles copy executable helpers into `.codex/orchestration/bin/`:
+
+```bash
+.codex/orchestration/bin/detect-orchestration-runtime.sh health
+.codex/orchestration/bin/dispatch-with-heartbeat.sh "$TASK_ID" 600 -- <command> [args...]
+.codex/orchestration/bin/run-with-timeout.sh 600 <command> [args...]
+```
+
+Use `dispatch-with-heartbeat.sh` for background dispatches. It writes `.tasks/<task-id>.heartbeat.json` and `.tasks/<task-id>.output`. Use `run-with-timeout.sh` only for foreground timeout-only runs.
 
 ---
 

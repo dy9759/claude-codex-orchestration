@@ -97,99 +97,29 @@ DISPATCHED --> ALIVE --> PROGRESSING --> COMPLETED
 
 ---
 
-## Dispatch with Heartbeat
+## Dispatch with Heartbeat (Executable Contract)
 
 ```bash
-dispatch_with_heartbeat() {
-  local task_id="$1" cmd="$2" timeout_s="${3:-1800}"
-  local start_ts=$(date +%s)
-  local output_file=".tasks/${task_id}.output"
-
-  mkdir -p .tasks
-
-  # Launch in background, capture PID
-  eval "$cmd" > "$output_file" 2>&1 &
-  local pid=$!
-
-  # Record dispatch metadata
-  cat > ".tasks/${task_id}.heartbeat.json" <<EOF
-{
-  "task_id": "$task_id",
-  "pid": $pid,
-  "started_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "timeout_s": $timeout_s,
-  "status": "DISPATCHED",
-  "stall_count": 0,
-  "last_bytes": 0,
-  "last_check": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-}
-EOF
-}
+.codex/orchestration/bin/dispatch-with-heartbeat.sh \
+  "$TASK_ID" "${TIMEOUT_S:-1800}" -- \
+  claude -p "$PROMPT" --output-format json --max-budget-usd "${BUDGET:-5}"
 ```
 
-## Heartbeat Check Loop
+Use the repo-local helper before Codex install:
 
 ```bash
-heartbeat_check() {
-  local task_id="$1"
-  local meta=".tasks/${task_id}.heartbeat.json"
-  local output=".tasks/${task_id}.output"
-
-  local pid stall_count last_bytes timeout_s started_at
-  pid=$(jq -r .pid "$meta")
-  stall_count=$(jq -r .stall_count "$meta")
-  last_bytes=$(jq -r .last_bytes "$meta")
-  timeout_s=$(jq -r .timeout_s "$meta")
-  started_at=$(jq -r .started_at "$meta")
-
-  # L1: Process alive?
-  if ! kill -0 "$pid" 2>/dev/null; then
-    # Check exit code
-    wait "$pid" 2>/dev/null
-    local exit_code=$?
-    if [ "$exit_code" -eq 0 ]; then
-      update_heartbeat "$meta" "COMPLETED" 0 0
-      return 0
-    fi
-    update_heartbeat "$meta" "DEAD" "$stall_count" "$last_bytes"
-    return 1
-  fi
-
-  # L2: Progress?
-  local current_bytes
-  current_bytes=$(wc -c < "$output" 2>/dev/null || echo 0)
-
-  if [ "$current_bytes" -gt "$last_bytes" ]; then
-    update_heartbeat "$meta" "PROGRESSING" 0 "$current_bytes"
-    return 0
-  fi
-
-  # No progress — increment stall counter
-  stall_count=$((stall_count + 1))
-  update_heartbeat "$meta" "STALLED" "$stall_count" "$last_bytes"
-
-  # Check timeout
-  local now elapsed
-  now=$(date +%s)
-  elapsed=$((now - $(date -d "$started_at" +%s 2>/dev/null || date -jf "%Y-%m-%dT%H:%M:%SZ" "$started_at" +%s 2>/dev/null)))
-
-  if [ "$elapsed" -gt "$timeout_s" ]; then
-    update_heartbeat "$meta" "TIMEOUT" "$stall_count" "$last_bytes"
-    return 1
-  fi
-
-  return 0
-}
-
-update_heartbeat() {
-  local meta="$1" status="$2" stall="$3" bytes="$4"
-  local tmp=$(mktemp)
-  jq --arg s "$status" --argjson sc "$stall" --argjson b "$bytes" \
-    --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '.status=$s | .stall_count=$sc | .last_bytes=$b | .last_check=$t' \
-    "$meta" > "$tmp" && mv "$tmp" "$meta"
-}
+./scripts/dispatch-with-heartbeat.sh "$TASK_ID" 600 -- codex exec "$PROMPT"
 ```
+
+The helper accepts the command as argv after `--`; never pass a shell string and never use `eval`. It validates `task_id`, captures output to `.tasks/<task-id>.output`, and writes state to `.tasks/<task-id>.heartbeat.json`.
+
+Implemented by the helper:
+- L1 process-alive check (`kill -0`)
+- L2 output-byte progress check
+- timeout kill + exit `124`
+- final statuses `COMPLETED`, `DEAD`, or `TIMEOUT`
+
+L3 semantic probe is an orchestrator responsibility: read `.tasks/<task-id>.output` during a long run and judge whether the partial output is meaningful. Do not claim L3 happened unless that inspection actually ran.
 
 ---
 
@@ -292,13 +222,13 @@ Existing `.tasks/*.json` schema extended with `dispatch` block:
 | Background complex | 30min | 8 intervals (16min) |
 | Review (read-only) | 5min | 2 intervals (4min) |
 
-Override per-task in dispatch: `dispatch_with_heartbeat "$task_id" "$cmd" 3600` for 1-hour timeout.
+Override per-task in dispatch: `dispatch-with-heartbeat.sh "$task_id" 3600 -- <command> [args...]` for 1-hour timeout.
 
 ---
 
 ## Integration Points
 
-- **`workflow-core.md`** — Phase 0 parallel execution starts heartbeat for each dispatch
-- **`codex-protocol.md`** — Codex dispatch auto-enables heartbeat for background tasks
-- **`codex-runtime.md`** — CC dispatch from Codex wraps `claude -p` with `.codex/orchestration/bin/run-with-timeout.sh` + heartbeat
-- **`cross-harness.md`** — `dispatch_with_heartbeat()` available to all harnesses
+- **`workflow-core.md`** — background dispatches launch through the heartbeat helper
+- **`codex-protocol.md`** — background Codex dispatches must use the helper; foreground tasks use portable timeout
+- **`codex-runtime.md`** — CC dispatch from Codex launches `claude -p` through `.codex/orchestration/bin/dispatch-with-heartbeat.sh`
+- **`cross-harness.md`** — installed Codex bundles copy `dispatch-with-heartbeat.sh` into `.codex/orchestration/bin/`

@@ -10,23 +10,29 @@ When Codex is the runtime (detected via `$CODEX_SESSION_ID`, `$CODEX_THREAD_ID`,
 # Standard dispatch
 claude -p "<prompt>" --output-format json --max-budget-usd N
 
-# With portable timeout + output capture (heartbeat-compatible)
+# Background dispatch with executable heartbeat + output capture
+.codex/orchestration/bin/dispatch-with-heartbeat.sh \
+  "$TASK_ID" "${TIMEOUT_S:-600}" -- \
+  claude -p "<prompt>" \
+  --output-format json --max-budget-usd "${BUDGET:-5}"
+
+# Foreground timeout-only dispatch
 .codex/orchestration/bin/run-with-timeout.sh "${TIMEOUT_S:-600}" \
   claude -p "<prompt>" \
-  --output-format json --max-budget-usd "${BUDGET:-5}" \
-  > ".tasks/${TASK_ID}.output" 2>&1
+  --output-format json --max-budget-usd "${BUDGET:-5}"
 ```
 
-Use `.codex/orchestration/bin/run-with-timeout.sh` instead of GNU `timeout`; macOS does not ship GNU coreutils by default. The wrapper delegates to `timeout`/`gtimeout` when present and otherwise uses a POSIX-ish shell fallback.
+Use `.codex/orchestration/bin/dispatch-with-heartbeat.sh` for background dispatches and `.codex/orchestration/bin/run-with-timeout.sh` for foreground timeout-only dispatches. The timeout wrapper avoids assuming GNU `timeout`; macOS does not ship GNU coreutils by default. It delegates to `timeout`/`gtimeout` when present and otherwise uses a POSIX-ish shell fallback.
 
 For runtime and peer-agent detection, use:
 
 ```bash
 .codex/orchestration/bin/detect-orchestration-runtime.sh summary
+.codex/orchestration/bin/detect-orchestration-runtime.sh health
 .codex/orchestration/bin/detect-orchestration-runtime.sh route frontend
 ```
 
-If `claude` is missing, unauthenticated, or times out, Codex keeps execution local or asks the user according to `runtime-routing.md` rather than pretending CC was consulted.
+If `claude` is missing, unauthenticated, or times out, Codex keeps execution local or asks the user according to `runtime-routing.md` rather than pretending CC was consulted. `available_agents` is based on version + auth health, not binary presence alone.
 
 ### Prompt Format (Natural Language — CC Processes NL Better Than XML)
 

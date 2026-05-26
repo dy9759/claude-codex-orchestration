@@ -18,7 +18,7 @@ Drop-in minimal global instructions for `~/.claude/CLAUDE.md`. Works on any mach
 
 Ask the user: `"是否需要触发一次全量代码审核？"` before every `git push`.
 
-### 5.2 Prefer `claude-codex-orchestration` Skill <!-- orch-skill-version: 2 -->
+### 5.2 Prefer `claude-codex-orchestration` Skill <!-- orch-skill-version: 3 -->
 
 Invoke the `claude-codex-orchestration` skill whenever the task matches its triggers:
 
@@ -26,7 +26,7 @@ Invoke the `claude-codex-orchestration` skill whenever the task matches its trig
 - Parallel implementation of bounded modules
 - Cross-harness setup (Cursor / Codex / OpenCode)
 - Runtime-agnostic capability routing (CC or Codex as orchestrator)
-- Cross-agent dispatch with heartbeat monitoring
+- Cross-agent dispatch with executable heartbeat monitoring
 - Pre-task thinking via `/co-think`
 - Strategic plan review via `/co-plan-review`
 - Engineering principles enforcement (Hyrum, Beyoncé, Chesterton, trunk-based, shift-left, feature flags, deprecation, maintainability harness, testing quality)

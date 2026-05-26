@@ -7,10 +7,10 @@ All Codex calls go through the `codex:codex-rescue` subagent, which wraps `codex
 | Task profile | Mode | Heartbeat | Why |
 |---|---|---|---|
 | Small, bounded, < 10 min | `foreground` | Timeout only (10min default) | Blocks orchestrator until done; simpler coordination |
-| Complex, multi-step, open-ended | `background` | Full (L1/L2/L3) | Returns `job-id`; orchestrator continues other work; heartbeat monitors |
+| Complex, multi-step, open-ended | `background` | Helper L1/L2 + orchestrator L3 | Returns `job-id`; orchestrator continues other work; heartbeat monitors |
 | Review / adversarial review | `foreground` | Timeout only (5min default) | Structured output, expect immediate feedback |
 
-**Heartbeat integration:** Background tasks automatically enable heartbeat monitoring per `heartbeat-protocol.md`. Foreground tasks get a portable timeout wrapper — if exceeded, orchestrator kills and falls back to self-execution.
+**Heartbeat integration:** Background tasks must be launched through `dispatch-with-heartbeat.sh` per `heartbeat-protocol.md`. If the helper is unavailable, do not claim heartbeat monitoring; run foreground with the portable timeout wrapper or fall back to local execution. Foreground tasks get a portable timeout wrapper — if exceeded, orchestrator kills and falls back to self-execution.
 
 Use the built-in `review` or `adversarial-review` commands for reviewing git diffs — do not write a custom review `task` prompt; the built-in contracts are better.
 

@@ -42,7 +42,7 @@ Keep with CC instead when the task needs repo-wide architecture judgment, fronte
 If the preferred agent is missing, unauthenticated, over budget, timing out, or under a quality hard-stop, do not block on orchestration ceremony. Route to the fallback agent; if no fallback is available, the current runtime executes locally with `degraded: true`.
 
 Concrete triggers:
-- `claude --version` / `codex --version` fails, auth returns forbidden/unauthorized, or the command is absent
+- `detect-orchestration-runtime.sh health` reports `version=missing`, `version=fail`, or `auth=fail`
 - portable timeout wrapper returns `124`
 - rolling quality file (`.codex-quality.jsonl` or `.cc-quality.jsonl`) shows success rate < 40% or 3 consecutive failures
 - user request is narrow enough that local execution is faster than dispatch setup
@@ -86,7 +86,7 @@ route(task_type, runtime, available_agents):
 
 **High-risk override:** before the algorithm above, if task_type is migrations/CI/release/secrets/env/package manifests/destructive git or file operations, return `local:<runtime>:requires-explicit-approval`. Never cross-dispatch these automatically.
 
-**Executable check:** `scripts/detect-orchestration-runtime.sh route <task-type>` implements the same routing contract for local validation and Codex installs.
+**Executable checks:** `scripts/detect-orchestration-runtime.sh health` verifies peer CLIs with version + auth probes, and `scripts/detect-orchestration-runtime.sh route <task-type>` implements the routing contract for local validation and Codex installs.
 
 ---
 
@@ -110,13 +110,13 @@ When Codex is orchestrator and needs CC for a task:
 # Basic dispatch
 claude -p "<task prompt>" --output-format json --max-budget-usd 5
 
-# With portable timeout wrapper (see codex-runtime.md)
-.codex/orchestration/bin/run-with-timeout.sh 600 \
+# Background dispatch with executable heartbeat (see codex-runtime.md)
+.codex/orchestration/bin/dispatch-with-heartbeat.sh "$task_id" 600 -- \
   claude -p "<task prompt>" --output-format json --max-budget-usd 5
 
-# Save output for heartbeat monitoring
-claude -p "<task prompt>" --output-format json --max-budget-usd 5 \
-  > ".tasks/${task_id}.output" 2>&1
+# Foreground timeout-only dispatch
+.codex/orchestration/bin/run-with-timeout.sh 600 \
+  claude -p "<task prompt>" --output-format json --max-budget-usd 5
 ```
 
 **CC dispatch prompt format** (mirrors Codex XML contract but in natural language — CC processes NL better):
@@ -156,7 +156,7 @@ Budget: $2 max
 
 ## Runtime Detection Integration
 
-Runtime detection happens at Phase 0 step 0 (see `workflow-core.md`). The routing table consults `detect_harness()` from `cross-harness.md` and `detect_available_agents()` to determine:
+Runtime detection happens at Phase 0 step 0 (see `workflow-core.md`). Prefer the executable helper installed by `install-codex.sh`; the shell functions in `cross-harness.md` are the fallback/reference implementation.
 
 1. **Who am I?** (runtime identity)
 2. **Who else is available?** (dispatchable agents)
@@ -164,13 +164,14 @@ Runtime detection happens at Phase 0 step 0 (see `workflow-core.md`). The routin
 
 ```bash
 # Resolved at session start, cached for session duration
-RUNTIME="$(detect_harness)"          # cc | codex | cursor | opencode
-AVAILABLE="$(detect_available_agents)"  # e.g. "cc codex gemini"
+./scripts/detect-orchestration-runtime.sh health
+RUNTIME="$(./scripts/detect-orchestration-runtime.sh runtime)"       # claude-code | codex | cursor | opencode
+AVAILABLE="$(./scripts/detect-orchestration-runtime.sh agents "$RUNTIME")"  # e.g. "cc codex gemini"
 
 # Per-task routing
 for task in plan_tasks; do
-  routing=$(resolve_routing "$task_type" "$RUNTIME" "$AVAILABLE")
-  # routing = { action: local|dispatch, agent: cc|codex|gemini }
+  routing=$(./scripts/detect-orchestration-runtime.sh route "$task_type" "$RUNTIME" "$AVAILABLE")
+  # routing = local:<runtime> | dispatch:<agent> | consult:gemini | local:<runtime>:degraded
 done
 ```
 

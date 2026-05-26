@@ -4,6 +4,7 @@
 # Usage:
 #   detect-orchestration-runtime.sh summary
 #   detect-orchestration-runtime.sh runtime
+#   detect-orchestration-runtime.sh health [claude|codex|all]
 #   detect-orchestration-runtime.sh agents [runtime]
 #   detect-orchestration-runtime.sh route <task-type> [runtime] [available-agents]
 
@@ -25,17 +26,61 @@ has_word() {
   esac
 }
 
-cli_ok() {
-  local cmd="$1"
+run_with_timeout() {
+  local seconds="$1"
+  shift
   local script_dir timeout_helper
-  command -v "$cmd" >/dev/null 2>&1 || return 1
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   timeout_helper="$script_dir/run-with-timeout.sh"
   if [ -x "$timeout_helper" ]; then
-    "$timeout_helper" 3 "$cmd" --version >/dev/null 2>&1 || return 1
+    "$timeout_helper" "$seconds" "$@"
   else
-    "$cmd" --version >/dev/null 2>&1 || return 1
+    "$@"
   fi
+}
+
+version_ok() {
+  local cmd="$1"
+  command -v "$cmd" >/dev/null 2>&1 || return 1
+  run_with_timeout 3 "$cmd" --version >/dev/null 2>&1
+}
+
+auth_ok() {
+  case "$1" in
+    claude)
+      run_with_timeout 5 claude auth status >/dev/null 2>&1
+      ;;
+    codex)
+      run_with_timeout 5 codex login status >/dev/null 2>&1
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+agent_ready() {
+  version_ok "$1" && auth_ok "$1"
+}
+
+health_line() {
+  local cmd="$1" label="$2" version_status auth_status
+  version_status="missing"
+  auth_status="unknown"
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "$label:version=$version_status auth=$auth_status"
+    return
+  fi
+  version_status="fail"
+  if version_ok "$cmd"; then
+    version_status="ok"
+    if auth_ok "$cmd"; then
+      auth_status="ok"
+    else
+      auth_status="fail"
+    fi
+  fi
+  echo "$label:version=$version_status auth=$auth_status"
 }
 
 detect_harness() {
@@ -87,15 +132,10 @@ detect_available_agents() {
   local runtime="${1:-$(detect_harness)}"
   local agents=""
 
-  case "$runtime" in
-    claude-code) agents="$(add_word "$agents" "cc")" ;;
-    codex) agents="$(add_word "$agents" "codex")" ;;
-  esac
-
-  if cli_ok claude; then
+  if agent_ready claude; then
     agents="$(add_word "$agents" "cc")"
   fi
-  if cli_ok codex; then
+  if agent_ready codex; then
     agents="$(add_word "$agents" "codex")"
   fi
 
@@ -184,6 +224,24 @@ case "$command_name" in
   runtime)
     detect_harness
     ;;
+  health)
+    case "${2:-all}" in
+      claude|cc)
+        health_line claude cc
+        ;;
+      codex)
+        health_line codex codex
+        ;;
+      all)
+        health_line claude cc
+        health_line codex codex
+        ;;
+      *)
+        echo "usage: $0 health [claude|codex|all]" >&2
+        exit 2
+        ;;
+    esac
+    ;;
   agents)
     detect_available_agents "${2:-$(detect_harness)}"
     ;;
@@ -205,7 +263,7 @@ case "$command_name" in
     echo "available_agents=$agents"
     ;;
   *)
-    echo "usage: $0 [summary|runtime|agents|route]" >&2
+    echo "usage: $0 [summary|runtime|health|agents|route]" >&2
     exit 2
     ;;
 esac
